@@ -1,0 +1,196 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  displayName  String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  preferences UserPreferences?
+  buckets     Bucket[]
+  goals       Goal[]
+  tasks       Task[]
+  taskEvents  TaskEvent[]
+}
+
+model UserPreferences {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  timezone     String   @default("UTC")
+  weekStartsOn Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Bucket {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  color      String?
+  icon       String?
+  sortOrder  Int       @default(0)
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  tasks Task[]
+
+  @@index([userId])
+}
+
+enum GoalStatus {
+  active
+  completed
+  archived
+}
+
+model Goal {
+  id          String     @id @default(uuid())
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  status      GoalStatus @default(active)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  tasks Task[]
+
+  @@index([userId])
+}
+
+enum TaskOrigin {
+  manual
+  assistant
+  import
+}
+
+enum TaskStatus {
+  captured
+  active
+  completed
+  dropped
+}
+
+enum Confidence {
+  low
+  medium
+  high
+}
+
+enum DeadlineSource {
+  explicit
+  inferred
+}
+
+enum Importance {
+  low
+  medium
+  high
+}
+
+model RecurrenceRule {
+  id         String    @id @default(uuid())
+  frequency  String // "daily" | "weekly" | "monthly"
+  interval   Int       @default(1)
+  byWeekday  Int[]     @default([])
+  byMonthday Int?
+  startDate  DateTime  @db.Date
+  endDate    DateTime? @db.Date
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  tasks Task[]
+}
+
+model Task {
+  id                 String          @id @default(uuid())
+  userId             String
+  user               User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bucketId           String?
+  bucket             Bucket?         @relation(fields: [bucketId], references: [id], onDelete: SetNull)
+  goalId             String?
+  goal               Goal?           @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  title              String
+  notes              String?
+  origin             TaskOrigin      @default(manual)
+  status             TaskStatus      @default(captured)
+  attentionDate      DateTime?
+  plannedWindowStart DateTime?
+  plannedWindowEnd   DateTime?
+  hardDeadline       DateTime?
+  deadlineSource     DeadlineSource?
+  estimateMinutes    Int?
+  estimateConfidence Confidence?
+  actualMinutes      Int?
+  importance         Importance      @default(medium)
+  waitingOn          String?
+  recurrenceRuleId   String?
+  recurrenceRule     RecurrenceRule? @relation(fields: [recurrenceRuleId], references: [id], onDelete: SetNull)
+  snoozedUntil       DateTime?
+  completedAt        DateTime?
+  droppedAt          DateTime?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  occurrences TaskOccurrence[]
+  events      TaskEvent[]
+
+  @@index([userId, status])
+  @@index([userId, bucketId])
+  @@index([userId, attentionDate])
+}
+
+enum OccurrenceStatus {
+  pending
+  completed
+  skipped
+}
+
+model TaskOccurrence {
+  id             String           @id @default(uuid())
+  taskId         String
+  task           Task             @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  occurrenceDate DateTime         @db.Date
+  status         OccurrenceStatus @default(pending)
+  completedAt    DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([taskId, occurrenceDate])
+}
+
+enum TaskEventType {
+  created
+  updated
+  completed
+  uncompleted
+  snoozed
+  dropped
+  reopened
+  archived
+}
+
+model TaskEvent {
+  id        String        @id @default(uuid())
+  taskId    String
+  task      Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      TaskEventType
+  payload   Json?
+  createdAt DateTime      @default(now())
+
+  @@index([taskId, createdAt])
+}

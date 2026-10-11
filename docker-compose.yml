@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: taskr
+      POSTGRES_PASSWORD: taskr_dev_password
+      POSTGRES_DB: taskr_dev
+    ports:
+      - "5433:5432"
+    volumes:
+      - taskr_pg_data:/var/lib/postgresql/data
+
+volumes:
+  taskr_pg_data:

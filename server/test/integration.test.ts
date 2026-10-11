@@ -1,0 +1,125 @@
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import request from "supertest";
+import { createApp } from "../src/index.js";
+import { prisma } from "../src/db/client.js";
+
+// Integration test against the real (local/dev) Postgres database configured
+// via DATABASE_URL. Creates and tears down its own user so it doesn't
+// interfere with manual testing data.
+
+const app = createApp();
+const testEmail = `vitest-${Date.now()}@example.com`;
+
+let agent: ReturnType<typeof request.agent>;
+
+beforeAll(() => {
+  agent = request.agent(app);
+});
+
+afterAll(async () => {
+  const user = await prisma.user.findUnique({ where: { email: testEmail } });
+  if (user) {
+    await prisma.user.delete({ where: { id: user.id } }); // cascades via schema
+  }
+  await prisma.$disconnect();
+});
+
+describe("Phase 1 core flows", () => {
+  it("registers, logs in, and returns the authenticated user", async () => {
+    const res = await agent
+      .post("/api/auth/register")
+      .send({ email: testEmail, password: "password123", displayName: "Vitest User", timezone: "UTC" });
+    expect(res.status).toBe(201);
+    expect(res.body.email).toBe(testEmail);
+
+    const me = await agent.get("/api/auth/me");
+    expect(me.status).toBe(200);
+    expect(me.body.email).toBe(testEmail);
+  });
+
+  it("creates a bucket and rejects a duplicate name", async () => {
+    const res = await agent.post("/api/buckets").send({ name: "Personal", color: "#111111" });
+    expect(res.status).toBe(201);
+
+    const dup = await agent.post("/api/buckets").send({ name: "Personal" });
+    expect(dup.status).toBe(409);
+  });
+
+  it("creates a daily recurring task and completing one occurrence never affects another", async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const createRes = await agent.post("/api/tasks").send({
+      title: "Water the plants",
+      status: "active",
+      recurrence: { frequency: "daily", interval: 1, startDate: today },
+    });
+    expect(createRes.status).toBe(201);
+    const task = createRes.body;
+    expect(task.occurrences.length).toBeGreaterThan(1);
+
+    const todayOcc = task.occurrences.find((o: { occurrenceDate: string }) => o.occurrenceDate.startsWith(today));
+    const otherOcc = task.occurrences.find((o: { occurrenceDate: string }) => !o.occurrenceDate.startsWith(today));
+    expect(todayOcc).toBeTruthy();
+    expect(otherOcc).toBeTruthy();
+
+    const completeRes = await agent.post(`/api/tasks/${task.id}/occurrences/${todayOcc.id}/complete`);
+    expect(completeRes.status).toBe(200);
+    expect(completeRes.body.status).toBe("completed");
+
+    const refetched = await agent.get(`/api/tasks/${task.id}`);
+    const refetchedToday = refetched.body.occurrences.find((o: { id: string }) => o.id === todayOcc.id);
+    const refetchedOther = refetched.body.occurrences.find((o: { id: string }) => o.id === otherOcc.id);
+    expect(refetchedToday.status).toBe("completed");
+    expect(refetchedOther.status).toBe("pending"); // independence: untouched
+  });
+
+  it("snoozing a task never changes its hard deadline", async () => {
+    const deadline = new Date(Date.now() + 1000 * 60 * 60 * 24 * 5).toISOString();
+    const createRes = await agent.post("/api/tasks").send({
+      title: "Submit report",
+      status: "active",
+      hardDeadline: deadline,
+    });
+    const task = createRes.body;
+    expect(task.hardDeadline).toBe(deadline);
+
+    const snoozeUntil = new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString();
+    const snoozeRes = await agent.post(`/api/tasks/${task.id}/snooze`).send({ until: snoozeUntil });
+    expect(snoozeRes.status).toBe(200);
+    expect(snoozeRes.body.snoozedUntil).toBe(snoozeUntil);
+    expect(snoozeRes.body.hardDeadline).toBe(deadline); // unchanged
+  });
+
+  it("completes, undoes, drops, and reopens a one-off task, recording events", async () => {
+    const createRes = await agent.post("/api/tasks").send({ title: "One-off task", status: "active" });
+    const task = createRes.body;
+
+    const completeRes = await agent.post(`/api/tasks/${task.id}/complete`);
+    expect(completeRes.body.status).toBe("completed");
+
+    const undoRes = await agent.post(`/api/tasks/${task.id}/undo`);
+    expect(undoRes.body.status).toBe("active");
+
+    const dropRes = await agent.post(`/api/tasks/${task.id}/drop`);
+    expect(dropRes.body.status).toBe("dropped");
+
+    const reopenRes = await agent.post(`/api/tasks/${task.id}/reopen`);
+    expect(reopenRes.body.status).toBe("active");
+
+    const fetched = await agent.get(`/api/tasks/${task.id}`);
+    const eventTypes = fetched.body.events.map((e: { type: string }) => e.type);
+    expect(eventTypes).toEqual(expect.arrayContaining(["created", "completed", "uncompleted", "dropped", "reopened"]));
+  });
+
+  it("quick-capture creates a task with status captured and no fabricated fields", async () => {
+    const res = await agent.post("/api/tasks/quick-capture").send({ text: "drop off the package this week" });
+    expect(res.status).toBe(201);
+    expect(res.body.status).toBe("captured");
+    expect(res.body.hardDeadline).toBeNull();
+    expect(res.body.title).toBe("drop off the package this week");
+  });
+
+  it("rejects unauthenticated access", async () => {
+    const res = await request(app).get("/api/tasks?view=all");
+    expect(res.status).toBe(401);
+  });
+});
