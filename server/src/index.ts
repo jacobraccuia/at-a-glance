@@ -15,6 +15,14 @@ const PgSessionStore = pgSession(session);
 
 export function createApp() {
   const app = express();
+  const isProduction = process.env.NODE_ENV === "production";
+
+  // Required for secure cookies to work correctly behind Railway's (or any)
+  // TLS-terminating reverse proxy -- otherwise Express sees plain HTTP and
+  // refuses to set a "secure" cookie even though the real connection is HTTPS.
+  if (isProduction) {
+    app.set("trust proxy", 1);
+  }
 
   // Sessions persist in Postgres (not in-memory) specifically so that
   // restarting the dev server (e.g. tsx watch picking up a file change)
@@ -31,7 +39,11 @@ export function createApp() {
       saveUninitialized: false,
       cookie: {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: isProduction,
+        // Web and API live on different subdomains in production, so the
+        // cookie must be sent cross-site; "none" requires "secure" (HTTPS),
+        // which Railway provides on every generated domain.
+        sameSite: isProduction ? "none" : "lax",
         maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
       },
     })
