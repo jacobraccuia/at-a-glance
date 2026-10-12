@@ -1,5 +1,6 @@
 import { useState } from "react";
-import type { Task } from "../api/types";
+import type { Bucket, Task } from "../api/types";
+import { TaskEditPanel } from "./TaskEditPanel";
 
 interface Props {
   task: Task;
@@ -9,6 +10,8 @@ interface Props {
   onDrop: () => void;
   onRename: (newTitle: string) => void;
   onAddToToday?: () => void;
+  buckets?: Bucket[];
+  onDetailsSaved?: () => void;
 }
 
 function isAttentionDateToday(attentionDate: string | null): boolean {
@@ -22,10 +25,21 @@ function isAttentionDateToday(attentionDate: string | null): boolean {
   );
 }
 
-export function TaskRow({ task, onComplete, onUndo, onSnoozeTomorrow, onDrop, onRename, onAddToToday }: Props) {
+export function TaskRow({
+  task,
+  onComplete,
+  onUndo,
+  onSnoozeTomorrow,
+  onDrop,
+  onRename,
+  onAddToToday,
+  buckets,
+  onDetailsSaved,
+}: Props) {
   const isDone = task.status === "completed";
   const [editing, setEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState(task.title);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   function commitRename() {
     setEditing(false);
@@ -39,6 +53,7 @@ export function TaskRow({ task, onComplete, onUndo, onSnoozeTomorrow, onDrop, on
 
   return (
     <li className={`task-row${isDone ? " done" : ""}`}>
+      <div className="task-row-top">
       <input type="checkbox" checked={isDone} onChange={isDone ? onUndo : onComplete} />
       <div className="task-row-main">
         {editing ? (
@@ -68,6 +83,8 @@ export function TaskRow({ task, onComplete, onUndo, onSnoozeTomorrow, onDrop, on
           )}
           {task.importance === "high" && <span className="pill importance-high">Important</span>}
           {task.waitingOn && <span className="pill waiting">Waiting: {task.waitingOn}</span>}
+          {task.estimateMinutes != null && <span className="pill">~{task.estimateMinutes}m</span>}
+          {task.notes && <span className="pill">Has notes</span>}
         </div>
       </div>
       {!isDone && (
@@ -77,6 +94,11 @@ export function TaskRow({ task, onComplete, onUndo, onSnoozeTomorrow, onDrop, on
               Add to Today
             </button>
           )}
+          {buckets && (
+            <button onClick={() => setDetailsOpen((o) => !o)} title="Edit details">
+              {detailsOpen ? "Close" : "Details"}
+            </button>
+          )}
           <button onClick={onSnoozeTomorrow} title="Snooze until tomorrow">
             Snooze
           </button>
@@ -84,6 +106,15 @@ export function TaskRow({ task, onComplete, onUndo, onSnoozeTomorrow, onDrop, on
             Drop
           </button>
         </div>
+      )}
+      </div>
+      {detailsOpen && buckets && (
+        <TaskEditPanel
+          task={task}
+          buckets={buckets}
+          onSaved={() => onDetailsSaved?.()}
+          onClose={() => setDetailsOpen(false)}
+        />
       )}
     </li>
   );

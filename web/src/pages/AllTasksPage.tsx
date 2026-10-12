@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { api } from "../api/client";
 import type { Bucket, Task, TaskStatus } from "../api/types";
 import { TaskRow } from "../components/TaskRow";
+import { TaskDetailsFields, emptyTaskDetails, type TaskDetailsValue } from "../components/TaskDetailsFields";
+import { RecurrenceFields, emptyRecurrence, type RecurrenceValue } from "../components/RecurrenceFields";
 
 export function AllTasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -10,8 +12,10 @@ export function AllTasksPage() {
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "">("");
   const [bucketFilter, setBucketFilter] = useState("");
   const [newTitle, setNewTitle] = useState("");
-  const [newBucketId, setNewBucketId] = useState("");
   const [newAddToToday, setNewAddToToday] = useState(false);
+  const [showMoreDetails, setShowMoreDetails] = useState(false);
+  const [newDetails, setNewDetails] = useState<TaskDetailsValue>(emptyTaskDetails);
+  const [newRecurrence, setNewRecurrence] = useState<RecurrenceValue>(emptyRecurrence);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -36,15 +40,38 @@ export function AllTasksPage() {
   async function createTask(e: FormEvent) {
     e.preventDefault();
     if (!newTitle.trim()) return;
-    await api.post("/tasks", {
-      title: newTitle.trim(),
-      status: "active",
-      bucketId: newBucketId || undefined,
-      attentionDate: newAddToToday ? new Date().toISOString() : undefined,
-    });
-    setNewTitle("");
-    setNewAddToToday(false);
-    load();
+    try {
+      setError(null);
+      await api.post("/tasks", {
+        title: newTitle.trim(),
+        status: "active",
+        bucketId: newDetails.bucketId || undefined,
+        importance: newDetails.importance,
+        hardDeadline: newDetails.deadline ? new Date(newDetails.deadline).toISOString() : undefined,
+        deadlineSource: newDetails.deadline ? "explicit" : undefined,
+        estimateMinutes: newDetails.estimateMinutes ? parseInt(newDetails.estimateMinutes, 10) : undefined,
+        waitingOn: newDetails.waitingOn || undefined,
+        notes: newDetails.notes || undefined,
+        attentionDate: newAddToToday ? new Date().toISOString() : undefined,
+        recurrence: newRecurrence.enabled
+          ? {
+              frequency: newRecurrence.frequency,
+              interval: newRecurrence.interval ? parseInt(newRecurrence.interval, 10) : 1,
+              byWeekday: newRecurrence.frequency === "weekly" ? newRecurrence.byWeekday : undefined,
+              byMonthday: newRecurrence.frequency === "monthly" && newRecurrence.byMonthday ? parseInt(newRecurrence.byMonthday, 10) : undefined,
+              startDate: new Date().toISOString().slice(0, 10),
+            }
+          : undefined,
+      });
+      setNewTitle("");
+      setNewAddToToday(false);
+      setNewDetails(emptyTaskDetails);
+      setNewRecurrence(emptyRecurrence);
+      setShowMoreDetails(false);
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create task");
+    }
   }
 
   async function completeTask(t: Task) {
@@ -78,21 +105,24 @@ export function AllTasksPage() {
     <div className="page">
       <h1>All tasks</h1>
 
-      <form onSubmit={createTask} className="inline-create-form">
-        <input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="New task title" />
-        <select value={newBucketId} onChange={(e) => setNewBucketId(e.target.value)}>
-          <option value="">No bucket</option>
-          {buckets.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
-          ))}
-        </select>
-        <label className="checkbox-label">
-          <input type="checkbox" checked={newAddToToday} onChange={(e) => setNewAddToToday(e.target.checked)} />
-          Add to Today
-        </label>
-        <button type="submit">Add</button>
+      <form onSubmit={createTask} className="inline-create-form-wrapper">
+        <div className="inline-create-form">
+          <input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="New task title" />
+          <label className="checkbox-label">
+            <input type="checkbox" checked={newAddToToday} onChange={(e) => setNewAddToToday(e.target.checked)} />
+            Add to Today
+          </label>
+          <button type="submit">Add</button>
+        </div>
+        <button type="button" className="details-toggle" onClick={() => setShowMoreDetails((s) => !s)}>
+          {showMoreDetails ? "- Hide details" : "+ Add details (bucket, deadline, repeat, notes...)"}
+        </button>
+        {showMoreDetails && (
+          <div className="create-details-panel">
+            <TaskDetailsFields value={newDetails} onChange={setNewDetails} buckets={buckets} />
+            <RecurrenceFields value={newRecurrence} onChange={setNewRecurrence} />
+          </div>
+        )}
       </form>
 
       <div className="filters">
@@ -127,6 +157,8 @@ export function AllTasksPage() {
             onDrop={() => dropTask(t)}
             onRename={(title) => renameTask(t, title)}
             onAddToToday={() => addToToday(t)}
+            buckets={buckets}
+            onDetailsSaved={load}
           />
         ))}
       </ul>

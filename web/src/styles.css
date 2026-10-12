@@ -153,13 +153,16 @@ select {
 }
 
 .task-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 10px 14px;
+}
+
+.task-row-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .task-row.done .task-title {
@@ -221,6 +224,10 @@ select {
   margin-bottom: 8px;
 }
 
+.inline-create-form-wrapper {
+  margin-bottom: 16px;
+}
+
 .inline-create-form,
 .filters {
   display: flex;
@@ -277,6 +284,79 @@ select {
 
 .bucket-list li > span:nth-child(2) {
   flex: 1;
+}
+
+.task-edit-panel,
+.create-details-panel {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.task-details-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.task-details-fields label,
+.recurrence-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.task-details-fields .notes-label {
+  grid-column: 1 / -1;
+}
+
+.task-edit-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.recurrence-fields {
+  margin-top: 10px;
+}
+
+.recurrence-detail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.weekday-picker {
+  display: flex;
+  gap: 4px;
+}
+
+.weekday-picker .weekday {
+  padding: 4px 8px;
+  font-size: 0.75rem;
+}
+
+.weekday-picker .weekday.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.small {
+  font-size: 0.8rem;
+}
+
+.details-toggle {
+  margin-bottom: 12px;
+  background: none;
+  border: none;
+  color: var(--accent);
+  padding: 0;
+  font-size: 0.85rem;
 }
 
 .muted {

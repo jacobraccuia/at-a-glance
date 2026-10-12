@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
-import type { Task, TodayViewResponse } from "../api/types";
+import type { Bucket, Task, TodayViewResponse } from "../api/types";
 import { TaskRow } from "../components/TaskRow";
 import { OccurrenceRow } from "../components/OccurrenceRow";
 
 export function UpcomingPage() {
   const [data, setData] = useState<TodayViewResponse | null>(null);
+  const [buckets, setBuckets] = useState<Bucket[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -19,6 +20,9 @@ export function UpcomingPage() {
   }, []);
 
   useEffect(load, [load]);
+  useEffect(() => {
+    api.get<Bucket[]>("/buckets").then(setBuckets);
+  }, []);
 
   if (error) return <p className="error">{error}</p>;
   if (!data) return <p className="muted">Loading...</p>;
@@ -64,6 +68,8 @@ export function UpcomingPage() {
             onDrop={() => dropTask(t)}
             onRename={(title) => renameTask(t, title)}
             onAddToToday={() => addToToday(t)}
+            buckets={buckets}
+            onDetailsSaved={load}
           />
         ))}
         {data.occurrences.map((o) => (

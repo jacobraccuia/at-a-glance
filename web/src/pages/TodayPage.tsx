@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
-import type { Stats, Task, TodayViewResponse } from "../api/types";
+import type { Bucket, Stats, Task, TodayViewResponse } from "../api/types";
 import { TaskRow } from "../components/TaskRow";
 import { OccurrenceRow } from "../components/OccurrenceRow";
 import { QuickCapture } from "../components/QuickCapture";
@@ -8,6 +8,7 @@ import { QuickCapture } from "../components/QuickCapture";
 export function TodayPage() {
   const [data, setData] = useState<TodayViewResponse | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
+  const [buckets, setBuckets] = useState<Bucket[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,6 +25,9 @@ export function TodayPage() {
   }, []);
 
   useEffect(load, [load]);
+  useEffect(() => {
+    api.get<Bucket[]>("/buckets").then(setBuckets);
+  }, []);
 
   async function completeTask(t: Task) {
     await api.post(`/tasks/${t.id}/complete`);
@@ -84,6 +88,8 @@ export function TodayPage() {
             onSnoozeTomorrow={() => snoozeTomorrow(t)}
             onDrop={() => dropTask(t)}
             onRename={(title) => renameTask(t, title)}
+            buckets={buckets}
+            onDetailsSaved={load}
           />
         ))}
         {pendingOccurrences.map((o) => (
@@ -115,6 +121,8 @@ export function TodayPage() {
                 onSnoozeTomorrow={() => snoozeTomorrow(t)}
                 onDrop={() => dropTask(t)}
                 onRename={(title) => renameTask(t, title)}
+                buckets={buckets}
+                onDetailsSaved={load}
               />
             ))}
             {completedOccurrences.map((o) => (
