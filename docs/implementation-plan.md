@@ -8,37 +8,45 @@ Nothing is marked done without the user seeing the app run and tests pass.
 - [x] Stack decision confirmed with product owner
 - [x] `docs/architecture.md`
 - [x] `docs/data-model.md`
-- [ ] `docs/implementation-plan.md` (this file)
-- [ ] `docs/integrations.md`
-- [ ] `docs/privacy.md`
-- [ ] README with exact local setup commands
-- [ ] git repo initialized (done), `.gitignore`
+- [x] `docs/implementation-plan.md` (this file)
+- [x] `docs/integrations.md`
+- [x] `docs/privacy.md`
+- [x] README with exact local setup commands
+- [x] git repo initialized, `.gitignore`
 
 ## Phase 1 — Real core MVP
 Backend (`server/`):
-- [ ] Project scaffold (TS, Express, Prisma, Docker Compose Postgres)
-- [ ] Prisma schema: User, UserPreferences, Bucket, Goal, Task, RecurrenceRule, TaskOccurrence, TaskEvent
-- [ ] Migrations applied, seed script with demo user + sample buckets/tasks
-- [ ] Auth: register, login, logout, session middleware, password hashing
-- [ ] Bucket CRUD (create/rename/archive/reorder) with ownership checks
-- [ ] Task CRUD (create/edit/complete/undo/snooze/drop/reopen/archive)
-- [ ] Recurrence: create recurring task, generate TaskOccurrence rows, independent per-occurrence completion
-- [ ] TaskEvent audit log written on every mutation
-- [ ] Views/query endpoints: Today, Upcoming, All (search/filter), by Bucket, captured/inbox
-- [ ] Goal linkage (optional goalId on task, basic goal CRUD)
-- [ ] Basic progress stats endpoint (completed this week, active backlog count, per-bucket breakdown)
-- [ ] Quick text capture endpoint (manual, no AI yet — deterministic parse of title only in Phase 1)
-- [ ] Unit tests: recurrence occurrence generation, snooze does not touch hardDeadline, daily completion independence
-- [ ] Integration tests: full CRUD + auth flows against real test DB
+- [x] Project scaffold (TS, Express, Prisma, Docker Compose Postgres)
+- [x] Prisma schema: User, UserPreferences, Bucket, Goal, Task, RecurrenceRule, TaskOccurrence, TaskEvent
+- [x] Migrations applied, seed script with demo user + sample buckets/tasks
+- [x] Auth: register, login, logout, session middleware, password hashing
+- [x] Bucket CRUD (create/rename/archive/unarchive/reorder-ready) with ownership checks
+- [x] Task CRUD (create/edit/complete/undo/snooze/drop/reopen)
+- [x] Recurrence: create recurring task, generate TaskOccurrence rows (90-day horizon), independent per-occurrence completion
+- [x] TaskEvent audit log written on every mutation
+- [x] Views/query endpoints: Today, Upcoming, All (search/filter), by Bucket, captured/inbox
+- [x] Goal linkage (optional goalId on task, basic goal CRUD)
+- [x] Basic progress stats endpoint (completed this week, active backlog count, per-bucket breakdown)
+- [x] Quick text capture endpoint (manual, no AI yet — deterministic parse of title only in Phase 1)
+- [x] Unit tests: recurrence occurrence generation (9 tests), snooze does not touch hardDeadline, daily completion independence
+- [x] Integration tests: full CRUD + auth flows against real test DB (7 tests, 16/16 passing total)
 
 Client (`web/`):
-- [ ] Vite + React + TS scaffold
-- [ ] Login/register screens
-- [ ] Today view (list, checkbox complete, snooze, inline edit)
-- [ ] Buckets view (CRUD)
-- [ ] All tasks view with filters/search
-- [ ] Quick text capture input
-- [ ] Basic progress stats display
+- [x] Vite + React + TS scaffold
+- [x] Login/register screens
+- [x] Today view (list, checkbox complete, snooze, inline edit via double-click)
+- [x] Buckets view (CRUD + archive/unarchive)
+- [x] All tasks view with filters/search + inline task creation
+- [x] Upcoming view (next 7 days)
+- [x] Quick text capture input
+- [x] Basic progress stats display
+
+Manually verified end-to-end in a real browser against the real backend/DB
+(login, complete/undo, buckets, recurrence) — see architecture doc for stack.
+Not yet built (explicitly deferred, not Phase 1 scope): Easy Wins module,
+"at a glance" curated picks, goal UI, drag-to-reorder buckets — these are
+UX-polish items better suited to Phase 2/3 once the assistant and native
+shell exist, so Phase 1 isn't duplicating UI work.
 
 Exit criteria for Phase 1: user can register, create buckets, create one-off
 and recurring tasks, see them in Today/Upcoming/All/Bucket views, complete,
