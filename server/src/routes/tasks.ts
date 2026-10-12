@@ -139,8 +139,14 @@ tasksRouter.post("/", async (req, res) => {
 
 // ---------- Quick text capture (deterministic Phase 1 version) ----------
 // No AI yet: the whole input string becomes the title, status=captured,
-// no fabricated bucket/deadline/estimate.
-const quickCaptureSchema = z.object({ text: z.string().min(1).max(500) });
+// no fabricated bucket/deadline/estimate. Caller may explicitly flag
+// "add to today" (e.g. the Today page's capture box) which sets attentionDate
+// to now and status to active instead of the default inbox/captured state --
+// this is still a deterministic, user-driven choice, not an AI inference.
+const quickCaptureSchema = z.object({
+  text: z.string().min(1).max(500),
+  addToToday: z.boolean().optional(),
+});
 tasksRouter.post("/quick-capture", async (req, res) => {
   const parsed = quickCaptureSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -148,7 +154,13 @@ tasksRouter.post("/quick-capture", async (req, res) => {
   }
   const userId = req.session.userId!;
   const task = await prisma.task.create({
-    data: { userId, title: parsed.data.text.trim(), status: "captured", origin: "manual" },
+    data: {
+      userId,
+      title: parsed.data.text.trim(),
+      status: parsed.data.addToToday ? "active" : "captured",
+      attentionDate: parsed.data.addToToday ? new Date() : undefined,
+      origin: "manual",
+    },
   });
   await logTaskEvent(prisma, { taskId: task.id, userId, type: "created", payload: { via: "quick-capture" } });
   res.status(201).json(task);

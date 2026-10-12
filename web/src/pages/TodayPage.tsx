@@ -72,7 +72,7 @@ export function TodayPage() {
         </p>
       )}
 
-      <QuickCapture onCaptured={load} />
+      <QuickCapture onCaptured={load} addToToday />
 
       <ul className="task-list">
         {pending.map((t) => (

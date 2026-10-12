@@ -233,6 +233,19 @@ select {
   flex: 1;
 }
 
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.checkbox-label input {
+  padding: 0;
+}
+
 .bucket-list {
   list-style: none;
   padding: 0;

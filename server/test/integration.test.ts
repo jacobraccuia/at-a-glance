@@ -118,6 +118,31 @@ describe("Phase 1 core flows", () => {
     expect(res.body.title).toBe("drop off the package this week");
   });
 
+  it("quick-capture with addToToday makes the task show up in the Today view", async () => {
+    const res = await agent.post("/api/tasks/quick-capture").send({ text: "water the garden", addToToday: true });
+    expect(res.status).toBe(201);
+    expect(res.body.status).toBe("active");
+    expect(res.body.attentionDate).toBeTruthy();
+
+    const today = await agent.get("/api/tasks?view=today");
+    const found = today.body.tasks.find((t: { id: string }) => t.id === res.body.id);
+    expect(found).toBeTruthy();
+  });
+
+  it("explicitly setting a task's attentionDate to today ('Add to Today') makes it appear there", async () => {
+    const createRes = await agent.post("/api/tasks").send({ title: "Reply to promoter", status: "active" });
+    const task = createRes.body;
+
+    let today = await agent.get("/api/tasks?view=today");
+    expect(today.body.tasks.find((t: { id: string }) => t.id === task.id)).toBeFalsy();
+
+    const patchRes = await agent.patch(`/api/tasks/${task.id}`).send({ attentionDate: new Date().toISOString() });
+    expect(patchRes.status).toBe(200);
+
+    today = await agent.get("/api/tasks?view=today");
+    expect(today.body.tasks.find((t: { id: string }) => t.id === task.id)).toBeTruthy();
+  });
+
   it("rejects unauthenticated access", async () => {
     const res = await request(app).get("/api/tasks?view=all");
     expect(res.status).toBe(401);

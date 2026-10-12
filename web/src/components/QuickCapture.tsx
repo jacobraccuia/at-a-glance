@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { api } from "../api/client";
 import { branding } from "../config/branding";
 
-export function QuickCapture({ onCaptured }: { onCaptured: () => void }) {
+export function QuickCapture({ onCaptured, addToToday }: { onCaptured: () => void; addToToday?: boolean }) {
   const [text, setText] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -11,7 +11,7 @@ export function QuickCapture({ onCaptured }: { onCaptured: () => void }) {
     if (!text.trim()) return;
     setSubmitting(true);
     try {
-      await api.post("/tasks/quick-capture", { text: text.trim() });
+      await api.post("/tasks/quick-capture", { text: text.trim(), addToToday: addToToday ?? false });
       setText("");
       onCaptured();
     } finally {

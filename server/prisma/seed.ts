@@ -1,8 +1,10 @@
 import "dotenv/config";
 import bcrypt from "bcrypt";
 import { PrismaClient } from "@prisma/client";
+import { generateOccurrenceDates } from "../src/lib/recurrence.js";
 
 const prisma = new PrismaClient();
+const OCCURRENCE_HORIZON_DAYS = 90;
 
 async function main() {
   const email = "demo@example.com";
@@ -63,7 +65,7 @@ async function main() {
     },
   });
 
-  await prisma.task.create({
+  const callMom = await prisma.task.create({
     data: {
       userId: user.id,
       bucketId: personal.id,
@@ -73,6 +75,27 @@ async function main() {
       recurrenceRuleId: rule.id,
     },
   });
+
+  // Materialize occurrences the same way the API's create-task route does --
+  // a recurring task is invisible in Today/Upcoming without these rows.
+  const today = new Date().toISOString().slice(0, 10);
+  const horizonEnd = new Date();
+  horizonEnd.setDate(horizonEnd.getDate() + OCCURRENCE_HORIZON_DAYS);
+  const dates = generateOccurrenceDates(
+    {
+      frequency: "weekly",
+      interval: 1,
+      byWeekday: [1],
+      startDate: today,
+    },
+    today,
+    horizonEnd.toISOString().slice(0, 10)
+  );
+  for (const dateStr of dates) {
+    await prisma.taskOccurrence.create({
+      data: { taskId: callMom.id, occurrenceDate: new Date(`${dateStr}T00:00:00Z`) },
+    });
+  }
 
   console.log("Seeded demo user: demo@example.com / password123");
 }

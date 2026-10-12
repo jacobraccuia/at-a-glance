@@ -8,9 +8,21 @@ interface Props {
   onSnoozeTomorrow: () => void;
   onDrop: () => void;
   onRename: (newTitle: string) => void;
+  onAddToToday?: () => void;
 }
 
-export function TaskRow({ task, onComplete, onUndo, onSnoozeTomorrow, onDrop, onRename }: Props) {
+function isAttentionDateToday(attentionDate: string | null): boolean {
+  if (!attentionDate) return false;
+  const today = new Date();
+  const d = new Date(attentionDate);
+  return (
+    d.getFullYear() === today.getFullYear() &&
+    d.getMonth() === today.getMonth() &&
+    d.getDate() === today.getDate()
+  );
+}
+
+export function TaskRow({ task, onComplete, onUndo, onSnoozeTomorrow, onDrop, onRename, onAddToToday }: Props) {
   const isDone = task.status === "completed";
   const [editing, setEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState(task.title);
@@ -60,6 +72,11 @@ export function TaskRow({ task, onComplete, onUndo, onSnoozeTomorrow, onDrop, on
       </div>
       {!isDone && (
         <div className="task-actions">
+          {onAddToToday && !task.recurrenceRuleId && !isAttentionDateToday(task.attentionDate) && (
+            <button onClick={onAddToToday} title="Add to Today">
+              Add to Today
+            </button>
+          )}
           <button onClick={onSnoozeTomorrow} title="Snooze until tomorrow">
             Snooze
           </button>

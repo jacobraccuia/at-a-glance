@@ -45,6 +45,10 @@ export function UpcomingPage() {
     await api.patch(`/tasks/${t.id}`, { title });
     load();
   }
+  async function addToToday(t: Task) {
+    await api.patch(`/tasks/${t.id}`, { attentionDate: new Date().toISOString() });
+    load();
+  }
 
   return (
     <div className="page">
@@ -59,6 +63,7 @@ export function UpcomingPage() {
             onSnoozeTomorrow={() => snoozeTomorrow(t)}
             onDrop={() => dropTask(t)}
             onRename={(title) => renameTask(t, title)}
+            onAddToToday={() => addToToday(t)}
           />
         ))}
         {data.occurrences.map((o) => (

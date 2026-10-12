@@ -11,6 +11,7 @@ export function AllTasksPage() {
   const [bucketFilter, setBucketFilter] = useState("");
   const [newTitle, setNewTitle] = useState("");
   const [newBucketId, setNewBucketId] = useState("");
+  const [newAddToToday, setNewAddToToday] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -39,8 +40,10 @@ export function AllTasksPage() {
       title: newTitle.trim(),
       status: "active",
       bucketId: newBucketId || undefined,
+      attentionDate: newAddToToday ? new Date().toISOString() : undefined,
     });
     setNewTitle("");
+    setNewAddToToday(false);
     load();
   }
 
@@ -66,6 +69,10 @@ export function AllTasksPage() {
     await api.patch(`/tasks/${t.id}`, { title });
     load();
   }
+  async function addToToday(t: Task) {
+    await api.patch(`/tasks/${t.id}`, { attentionDate: new Date().toISOString() });
+    load();
+  }
 
   return (
     <div className="page">
@@ -81,6 +88,10 @@ export function AllTasksPage() {
             </option>
           ))}
         </select>
+        <label className="checkbox-label">
+          <input type="checkbox" checked={newAddToToday} onChange={(e) => setNewAddToToday(e.target.checked)} />
+          Add to Today
+        </label>
         <button type="submit">Add</button>
       </form>
 
@@ -115,6 +126,7 @@ export function AllTasksPage() {
             onSnoozeTomorrow={() => snoozeTomorrow(t)}
             onDrop={() => dropTask(t)}
             onRename={(title) => renameTask(t, title)}
+            onAddToToday={() => addToToday(t)}
           />
         ))}
       </ul>
