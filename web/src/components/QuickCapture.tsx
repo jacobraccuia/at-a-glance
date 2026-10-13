@@ -197,11 +197,7 @@ export function QuickCapture({ onCaptured, addToToday }: { onCaptured: () => voi
           autoResize(e.target);
         }}
         onKeyDown={onKeyDown}
-        placeholder={
-          listening
-            ? "Listening..."
-            : `Tell ${branding.assistantName}... talk or type (Shift+Enter for a new line)`
-        }
+        placeholder={listening ? "Listening..." : "What's up?"}
         disabled={submitting}
         aria-label={`Tell ${branding.assistantName}`}
       />
