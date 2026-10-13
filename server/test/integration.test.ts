@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import request from "supertest";
 import { createApp } from "../src/index.js";
 import { prisma } from "../src/db/client.js";
+import * as intentParser from "../src/lib/assistant/intentParser.js";
 
 // Integration test against the real (local/dev) Postgres database configured
 // via DATABASE_URL. Creates and tears down its own user so it doesn't
@@ -141,6 +142,67 @@ describe("Phase 1 core flows", () => {
 
     today = await agent.get("/api/tasks?view=today");
     expect(today.body.tasks.find((t: { id: string }) => t.id === task.id)).toBeTruthy();
+  });
+
+  it("quick-capture applies an AI-suggested bucket/importance/soft-date without ever setting a hard deadline as 'explicit'", async () => {
+    const bucket = await agent.post("/api/buckets").send({ name: "Errands", color: "#222222" });
+    expect(bucket.status).toBe(201);
+
+    // Mock the parser directly instead of calling the real OpenAI API --
+    // deterministic, free, and fast. Confirms the *route's* handling of a
+    // suggestion (bucket resolution, date math, origin tagging) is correct,
+    // independent of whatever the real model would say.
+    const spy = vi.spyOn(intentParser, "parseCaptureText").mockResolvedValue({
+      cleanTitle: "Drop off the package",
+      bucketName: "Errands",
+      importance: "high",
+      estimateMinutes: 15,
+      waitingOn: null,
+      dateKind: "hard",
+      dateDaysFromNow: 3,
+    });
+
+    try {
+      const res = await agent.post("/api/tasks/quick-capture").send({ text: "drop off the package by friday, 15 min" });
+      expect(res.status).toBe(201);
+      expect(res.body.title).toBe("Drop off the package");
+      expect(res.body.origin).toBe("assistant");
+      expect(res.body.importance).toBe("high");
+      expect(res.body.estimateMinutes).toBe(15);
+      expect(res.body.bucketId).toBe(bucket.body.id);
+      expect(res.body.status).toBe("active");
+      expect(res.body.hardDeadline).toBeTruthy();
+      // Never "explicit" from AI-inferred text, regardless of how clearly worded.
+      expect(res.body.deadlineSource).toBe("inferred");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("quick-capture's explicit addToToday always wins over an AI-suggested date", async () => {
+    const spy = vi.spyOn(intentParser, "parseCaptureText").mockResolvedValue({
+      cleanTitle: "Call the dentist",
+      bucketName: null,
+      importance: null,
+      estimateMinutes: null,
+      waitingOn: null,
+      dateKind: "soft",
+      dateDaysFromNow: 10,
+    });
+
+    try {
+      const res = await agent
+        .post("/api/tasks/quick-capture")
+        .send({ text: "call the dentist sometime", addToToday: true });
+      expect(res.status).toBe(201);
+      expect(res.body.status).toBe("active");
+      // attentionDate should be "now" (addToToday), not 10 days out.
+      const attentionDate = new Date(res.body.attentionDate);
+      const daysOut = (attentionDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24);
+      expect(Math.abs(daysOut)).toBeLessThan(1);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("rejects unauthenticated access", async () => {

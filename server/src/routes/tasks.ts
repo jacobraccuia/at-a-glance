@@ -5,6 +5,7 @@ import { requireAuth } from "../middleware/requireAuth.js";
 import { logTaskEvent } from "../lib/taskEvents.js";
 import { generateOccurrenceDates } from "../lib/recurrence.js";
 import { addDaysToDateString, endOfDayInTimeZone, getCurrentDateInTimeZone, startOfDayInTimeZone } from "../lib/timezone.js";
+import { parseCaptureText } from "../lib/assistant/intentParser.js";
 
 export const tasksRouter = Router();
 tasksRouter.use(requireAuth);
@@ -137,12 +138,22 @@ tasksRouter.post("/", async (req, res) => {
   res.status(201).json(full);
 });
 
-// ---------- Quick text capture (deterministic Phase 1 version) ----------
-// No AI yet: the whole input string becomes the title, status=captured,
-// no fabricated bucket/deadline/estimate. Caller may explicitly flag
-// "add to today" (e.g. the Today page's capture box) which sets attentionDate
-// to now and status to active instead of the default inbox/captured state --
-// this is still a deterministic, user-driven choice, not an AI inference.
+// ---------- Quick text capture ----------
+// Phase 2, core slice: if OPENAI_API_KEY is configured, the input text is
+// run through a structured intent parser (see lib/assistant/intentParser.ts)
+// to *suggest* a bucket/importance/estimate/rough date. The parser can only
+// choose from this user's own existing buckets (never invents one), never
+// resolves absolute dates itself (the server does that date math, not the
+// model), and any failure/timeout/invalid response degrades to exactly the
+// old deterministic behavior below. "addToToday" from the caller (an
+// explicit user action, e.g. tapping it on the Today page) always wins over
+// any AI-inferred date, since it's a direct instruction.
+//
+// Why no hard deadline from AI: per the master prompt, hard deadlines must
+// never be invented. Even when the text clearly says "due Friday", the
+// resulting hardDeadline is tagged deadlineSource="inferred" (never
+// "explicit") -- "explicit" is reserved for dates a user set directly via
+// the Details panel, not text the assistant interpreted.
 const quickCaptureSchema = z.object({
   text: z.string().min(1).max(500),
   addToToday: z.boolean().optional(),
@@ -153,16 +164,72 @@ tasksRouter.post("/quick-capture", async (req, res) => {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
   const userId = req.session.userId!;
-  const task = await prisma.task.create({
-    data: {
-      userId,
-      title: parsed.data.text.trim(),
-      status: parsed.data.addToToday ? "active" : "captured",
-      attentionDate: parsed.data.addToToday ? new Date() : undefined,
-      origin: "manual",
-    },
+  const text = parsed.data.text.trim();
+  const tz = await getUserTimezone(userId);
+  const todayISO = getCurrentDateInTimeZone(tz);
+
+  const buckets = await prisma.bucket.findMany({ where: { userId, archivedAt: null } });
+  const intent = await parseCaptureText(text, {
+    todayISO,
+    bucketNames: buckets.map((b) => b.name),
   });
-  await logTaskEvent(prisma, { taskId: task.id, userId, type: "created", payload: { via: "quick-capture" } });
+
+  const data: {
+    userId: string;
+    title: string;
+    status: "captured" | "active";
+    origin: "manual" | "assistant";
+    attentionDate?: Date;
+    hardDeadline?: Date;
+    deadlineSource?: "inferred";
+    bucketId?: string;
+    importance?: "low" | "medium" | "high";
+    estimateMinutes?: number;
+    estimateConfidence?: "low" | "medium" | "high";
+    waitingOn?: string;
+  } = {
+    userId,
+    title: text,
+    status: parsed.data.addToToday ? "active" : "captured",
+    attentionDate: parsed.data.addToToday ? new Date() : undefined,
+    origin: "manual",
+  };
+
+  if (intent) {
+    data.origin = "assistant";
+    if (intent.cleanTitle.trim()) data.title = intent.cleanTitle.trim();
+    if (intent.importance) data.importance = intent.importance;
+    if (intent.waitingOn) data.waitingOn = intent.waitingOn;
+    if (intent.estimateMinutes != null && intent.estimateMinutes > 0) {
+      data.estimateMinutes = intent.estimateMinutes;
+      data.estimateConfidence = "medium";
+    }
+    if (intent.bucketName) {
+      const match = buckets.find((b) => b.name.toLowerCase() === intent.bucketName!.toLowerCase());
+      if (match) data.bucketId = match.id;
+    }
+
+    // An explicit "add to today" tap always wins over the AI's rough date.
+    if (!parsed.data.addToToday && intent.dateKind !== "none" && intent.dateDaysFromNow != null) {
+      const resolvedDateStr = addDaysToDateString(todayISO, intent.dateDaysFromNow);
+      const resolvedDate = startOfDayInTimeZone(resolvedDateStr, tz);
+      data.status = "active";
+      if (intent.dateKind === "hard") {
+        data.hardDeadline = resolvedDate;
+        data.deadlineSource = "inferred";
+      } else {
+        data.attentionDate = resolvedDate;
+      }
+    }
+  }
+
+  const task = await prisma.task.create({ data });
+  await logTaskEvent(prisma, {
+    taskId: task.id,
+    userId,
+    type: "created",
+    payload: { via: "quick-capture", assisted: Boolean(intent) },
+  });
   res.status(201).json(task);
 });
 
