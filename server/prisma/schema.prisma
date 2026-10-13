@@ -15,11 +15,36 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  preferences UserPreferences?
-  buckets     Bucket[]
-  goals       Goal[]
-  tasks       Task[]
-  taskEvents  TaskEvent[]
+  preferences   UserPreferences?
+  buckets       Bucket[]
+  goals         Goal[]
+  tasks         Task[]
+  taskEvents    TaskEvent[]
+  conversations AssistantConversation[]
+}
+
+model AssistantConversation {
+  id        String             @id @default(uuid())
+  userId    String
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  messages  AssistantMessage[]
+
+  @@index([userId, updatedAt])
+}
+
+model AssistantMessage {
+  id             String               @id @default(uuid())
+  conversationId String
+  conversation   AssistantConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String
+  content        String
+  /// Structured record of what the assistant did (or asked) for this turn.
+  actions        Json?
+  createdAt      DateTime             @default(now())
+
+  @@index([conversationId, createdAt])
 }
 
 model UserPreferences {

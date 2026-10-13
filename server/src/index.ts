@@ -12,6 +12,7 @@ import { bucketsRouter } from "./routes/buckets.js";
 import { tasksRouter } from "./routes/tasks.js";
 import { goalsRouter } from "./routes/goals.js";
 import { statsRouter } from "./routes/stats.js";
+import { assistantRouter } from "./routes/assistant.js";
 import { branding } from "./config/branding.js";
 
 const PgSessionStore = pgSession(session);
@@ -61,6 +62,7 @@ export function createApp() {
   app.use("/api/tasks", tasksRouter);
   app.use("/api/goals", goalsRouter);
   app.use("/api/stats", statsRouter);
+  app.use("/api/assistant", assistantRouter);
 
   // Serve the built web app (React/Vite) from the same origin as the API.
   // This is what makes session cookies work reliably everywhere, including

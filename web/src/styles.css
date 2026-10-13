@@ -390,6 +390,175 @@ button:focus-visible {
   color: var(--danger);
 }
 
+/* ---------- Assistant chat ---------- */
+
+.assistant-page {
+  display: flex;
+  flex-direction: column;
+  /* Fill the viewport under the sticky header / above the bottom nav. */
+  min-height: calc(100dvh - 120px);
+}
+
+@media (max-width: 680px) {
+  .assistant-page {
+    min-height: calc(100dvh - var(--nav-height) - env(safe-area-inset-bottom) - 80px);
+  }
+}
+
+.assistant-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.assistant-header h1 {
+  margin-bottom: 2px;
+}
+
+.assistant-new {
+  font-size: 0.8rem;
+  padding: 6px 12px;
+  min-height: 34px;
+  white-space: nowrap;
+}
+
+.assistant-thread {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 0 16px;
+  min-height: 240px;
+}
+
+.assistant-empty {
+  margin: auto 0;
+  text-align: center;
+  padding: 24px 8px;
+}
+
+.assistant-empty-lead {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin: 0 0 16px;
+}
+
+.assistant-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.assistant-suggestion {
+  font-size: 0.82rem;
+  padding: 8px 12px;
+  min-height: unset;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--accent);
+}
+
+.assistant-suggestion:hover {
+  border-color: var(--accent);
+}
+
+.assistant-bubble {
+  max-width: min(92%, 520px);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.assistant-bubble.user {
+  align-self: flex-end;
+}
+
+.assistant-bubble.assistant {
+  align-self: flex-start;
+}
+
+.assistant-bubble-body {
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.4;
+  font-size: 0.95rem;
+}
+
+.assistant-bubble.user .assistant-bubble-body {
+  background: var(--accent);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+
+.assistant-bubble.assistant .assistant-bubble-body {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 4px;
+}
+
+.assistant-undo-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.assistant-undo {
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  min-height: unset;
+  border-radius: 999px;
+  color: var(--muted);
+}
+
+.assistant-error {
+  color: var(--danger);
+  font-size: 0.85rem;
+  margin: 0 0 6px;
+}
+
+.assistant-composer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+  position: sticky;
+  bottom: 0;
+  padding: 10px 0 calc(6px + env(safe-area-inset-bottom));
+  background: var(--bg);
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid var(--border);
+  margin: 0 -4px;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
+@media (max-width: 680px) {
+  .assistant-composer {
+    bottom: calc(var(--nav-height) + env(safe-area-inset-bottom) - 8px);
+  }
+}
+
+.assistant-composer textarea {
+  flex: 1;
+  resize: none;
+  border-radius: 20px;
+  padding: 11px 16px;
+  line-height: 1.35;
+  font-family: inherit;
+  overflow-y: auto;
+  min-height: 44px;
+}
+
 /* ---------- Task list ---------- */
 
 .task-list {

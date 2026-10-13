@@ -5,6 +5,7 @@ import { TodayPage } from "./pages/TodayPage";
 import { UpcomingPage } from "./pages/UpcomingPage";
 import { AllTasksPage } from "./pages/AllTasksPage";
 import { BucketsPage } from "./pages/BucketsPage";
+import { AssistantPage } from "./pages/AssistantPage";
 import { Layout } from "./components/Layout";
 
 function RequireAuth({ children }: { children: React.ReactElement }) {
@@ -25,11 +26,12 @@ function RouterContent() {
           </RequireAuth>
         }
       >
+        <Route path="/assistant" element={<AssistantPage />} />
         <Route path="/today" element={<TodayPage />} />
         <Route path="/upcoming" element={<UpcomingPage />} />
         <Route path="/all" element={<AllTasksPage />} />
         <Route path="/buckets" element={<BucketsPage />} />
-        <Route path="*" element={<Navigate to="/today" replace />} />
+        <Route path="*" element={<Navigate to="/assistant" replace />} />
       </Route>
     </Routes>
   );

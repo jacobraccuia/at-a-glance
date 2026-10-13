@@ -4,6 +4,15 @@ import { branding } from "../config/branding";
 
 const NAV_ITEMS = [
   {
+    to: "/assistant",
+    label: "Assistant",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      </svg>
+    ),
+  },
+  {
     to: "/today",
     label: "Today",
     icon: (
@@ -71,8 +80,6 @@ export function Layout() {
       <main>
         <Outlet />
       </main>
-      {/* Mobile-only fixed tab bar; hidden on desktop via CSS, where the
-          header nav above takes over. Same routes, same links. */}
       <nav className="bottom-nav">
         {NAV_ITEMS.map((item) => (
           <NavLink key={item.to} to={item.to}>

@@ -5,14 +5,12 @@ cognitive overhead. See `CURSOR_MASTER_PROMPT.md` for the full product spec
 and `docs/` for architecture, data model, implementation plan, integrations,
 and privacy documentation.
 
-**Status:** Phase 1 (Real core MVP) complete and deployed. Phase 2 core
-slice in progress — AI-assisted quick capture (OpenAI-backed bucket /
-importance / estimate / rough-date suggestions, with a fully deterministic
-fallback when no API key is set) is live; see `docs/implementation-plan.md`
-for exactly what's built vs. explicitly deferred. Backend fully tested
-(20/20 tests passing). Native iOS app and deeper assistant features
-(voice, conversational commands, calendar/email integrations) are later
-phases.
+**Status:** Phase 1 complete. Phase 2 assistant is the primary surface —
+conversational chat at `/assistant` (text + in-app mic) that can create,
+complete, cancel, snooze, list, and clarify, with persisted conversation
+history and one-tap undo. Today still has a text-only quick-add dump.
+See `docs/implementation-plan.md` for built vs. still-deferred Phase 2
+items. Native iOS / Siri / Watch are Phase 3.
 
 **Live:** https://server-production-1374.up.railway.app
 

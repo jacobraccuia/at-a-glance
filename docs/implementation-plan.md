@@ -54,7 +54,7 @@ undo, snooze, drop/reopen, see accurate progress stats — all persisted in
 Postgres, all covered by passing tests, runnable locally via documented
 commands.
 
-## Phase 2 — Assistant (core slice in progress)
+## Phase 2 — Assistant (primary surface live)
 
 **Built and tested** (quick-capture is now AI-assisted, with a deterministic
 fallback when no API key is configured or the call fails/times out):
@@ -117,30 +117,40 @@ fallback when no API key is configured or the call fails/times out):
         panel, inline rename), by explicit user choice over adding a
         blocking confirmation screen.
 
-**Explicitly deferred — not in this pass, listed so nothing is assumed done:**
-- [x] In-app mic on the quick-capture box (Web Speech API —
-      `SpeechRecognition` / `webkitSpeechRecognition`). Tap to talk, tap
-      again to stop; interim transcripts stream into the same textarea so
-      it feels built-in rather than "use the keyboard mic." Unsupported
-      browsers get a disabled mic with an explanatory tooltip; permission
-      denial surfaces as an inline error. Still not Siri/Watch (that needs
-      a native app — see Phase 3), and still not server-side Whisper —
-      those remain deferred if Web Speech proves flaky on a specific device.
-- [ ] Conversational/chat-based commands (e.g. "snooze the promoter task" via
-      natural language) — all non-capture actions are still direct UI buttons
-- [ ] Clarifying questions when the model is unsure (it just omits the
-      uncertain field rather than asking)
+**Conversational assistant (the real product surface — not a dictation bar):**
+- [x] `AssistantConversation` / `AssistantMessage` models + migration; chat
+      history persists per user.
+- [x] `POST /api/assistant/message` — shared text/voice intent pipeline.
+      Model returns a structured plan (`create_tasks`, `complete`, `drop`,
+      `snooze`, `reopen`, `add_to_today`, `list`, `clarify`, `none`); a
+      separate deterministic executor resolves task references and writes
+      to the DB. Model never touches SQL.
+- [x] Entity resolution: free-text task queries matched against open tasks
+      (title containment / token overlap). Ambiguous matches → clarify,
+      never guess the wrong task.
+- [x] One-tap undo for complete / drop / snooze / reopen via
+      `POST /api/assistant/undo`.
+- [x] Clarifying questions when the model (or resolver) is unsure.
+- [x] Chat UI at `/assistant` (default post-login route, first nav item) —
+      ChatGPT-style thread, suggestion chips, sticky composer.
+- [x] Mic lives on the **assistant** composer (Web Speech API), not on
+      Today quick-add. Quick-add remains a text-only fast dump.
+- [x] No-AI fallback: raw message becomes a create_tasks dump so the
+      assistant stays usable without an API key.
+- [x] Tests: unit tests for task resolution; integration tests for
+      drop+undo, multi-create via mocked plan, and no-AI fallback.
+
+**Still deferred within Phase 2 (not claiming these are done):**
 - [ ] "Quick tidy-up" review queue (How long will this take? Still waiting?)
-- [ ] Easy Wins surfacing
+- [ ] Easy Wins surfacing ("I have 25 minutes…")
+- [ ] Natural-language recurrence creation ("Every Monday remind me…")
+      via the assistant (recurrence still works through the All-tasks form)
 - [ ] Estimate-correction learning signal / `LearnedPreference` /
-      `LearningSignal` models (not created — corrections are just normal
-      edits for now, nothing is "learned" from them)
+      `LearningSignal` models
 - [ ] Telemetry on estimate corrections
-- [ ] `AssistantConversation`/`Message` models or any conversation history
-- [ ] Safe confirmation step before "consequential" AI actions beyond normal
-      create (there's nothing more consequential than a reversible task
-      create in this slice, so this hasn't come up yet)
-- [ ] Open loops, calendar-aware scheduling — those are Phases 4/5 regardless
+- [ ] Server-side Whisper if Web Speech proves flaky on a device
+- [ ] Siri / Watch — needs native app (Phase 3)
+- [ ] Open loops, calendar-aware scheduling — Phases 4/5
 
 ## Phase 3 — Native iOS polish (not started)
 Deferred. SwiftUI Today view, widgets, App Intents/Shortcuts, share

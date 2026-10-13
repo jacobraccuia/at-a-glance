@@ -3,6 +3,7 @@ import request from "supertest";
 import { createApp } from "../src/index.js";
 import { prisma } from "../src/db/client.js";
 import * as intentParser from "../src/lib/assistant/intentParser.js";
+import * as conversationParser from "../src/lib/assistant/conversationParser.js";
 
 // Integration test against the real (local/dev) Postgres database configured
 // via DATABASE_URL. Creates and tears down its own user so it doesn't
@@ -288,6 +289,83 @@ describe("Phase 1 core flows", () => {
     } finally {
       spy.mockRestore();
     }
+  });
+
+  it("assistant drops a task by natural-language reference and supports undo", async () => {
+    const created = await agent.post("/api/tasks").send({ title: "Plan the drop party", status: "active" });
+    expect(created.status).toBe(201);
+
+    const spy = vi.spyOn(conversationParser, "parseConversationMessage").mockResolvedValue({
+      reply: "Cancelled the drop party task.",
+      actions: [{ type: "drop", taskQuery: "drop party" }],
+    });
+
+    try {
+      const res = await agent.post("/api/assistant/message").send({ text: "that task about drop party can be cancelled" });
+      expect(res.status).toBe(201);
+      expect(res.body.executed).toHaveLength(1);
+      expect(res.body.executed[0].ok).toBe(true);
+      expect(res.body.executed[0].type).toBe("drop");
+      expect(res.body.executed[0].undo).toEqual({ kind: "drop", taskId: created.body.id });
+
+      const fetched = await agent.get(`/api/tasks/${created.body.id}`);
+      expect(fetched.body.status).toBe("dropped");
+
+      const undo = await agent.post("/api/assistant/undo").send(res.body.executed[0].undo);
+      expect(undo.status).toBe(200);
+      expect(undo.body.task.status).toBe("active");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("assistant creates tasks from a conversational message when AI suggests create_tasks", async () => {
+    const spy = vi.spyOn(conversationParser, "parseConversationMessage").mockResolvedValue({
+      reply: "Added those.",
+      actions: [
+        {
+          type: "create_tasks",
+          items: [
+            {
+              cleanTitle: "Buy milk",
+              bucketName: null,
+              importance: null,
+              estimateMinutes: null,
+              waitingOn: null,
+              dateKind: "none",
+              dateDaysFromNow: null,
+            },
+            {
+              cleanTitle: "Email the promoter",
+              bucketName: null,
+              importance: "high",
+              estimateMinutes: null,
+              waitingOn: null,
+              dateKind: "none",
+              dateDaysFromNow: null,
+            },
+          ],
+        },
+      ],
+    });
+
+    try {
+      const res = await agent.post("/api/assistant/message").send({ text: "buy milk and email the promoter" });
+      expect(res.status).toBe(201);
+      expect(res.body.executed.filter((e: { type: string }) => e.type === "create_tasks")).toHaveLength(2);
+      expect(res.body.message.content).toContain("Added");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("assistant without AI falls back to creating a task from the raw text", async () => {
+    // No mock -- exercises the real no-API-key path.
+    const res = await agent.post("/api/assistant/message").send({ text: "water the fern" });
+    expect(res.status).toBe(201);
+    expect(res.body.executed[0].type).toBe("create_tasks");
+    expect(res.body.executed[0].ok).toBe(true);
+    expect(res.body.executed[0].taskTitle).toBe("water the fern");
   });
 
   it("rejects unauthenticated access", async () => {
