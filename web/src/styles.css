@@ -4,105 +4,221 @@
   --ink: #2b2b2b;
   --muted: #7a7a7a;
   --accent: #4062bb;
+  --accent-soft: #ebf0fb;
   --border: #e4e1da;
   --danger: #b3432b;
+  --danger-soft: #fbeae5;
+  --success: #3f8f5f;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --shadow-sm: 0 1px 2px rgba(43, 43, 43, 0.06);
+  --shadow-md: 0 6px 20px rgba(43, 43, 43, 0.08);
+  --nav-height: 64px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* This app only has a light theme so far. Without this, Safari/iOS in
+     system Dark Mode renders native form controls (buttons, inputs) with
+     dark-mode default text color while our CSS still forces a light
+     background -- white text on a white button, invisible. */
+  color-scheme: light;
 }
 
 * {
   box-sizing: border-box;
 }
 
+html,
+body {
+  height: 100%;
+}
+
 body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
 }
+
+h1,
+h2,
+h3 {
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+/* ---------- Buttons ---------- */
 
 button {
   cursor: pointer;
   border: 1px solid var(--border);
   background: var(--surface);
-  border-radius: 6px;
-  padding: 6px 12px;
+  color: var(--ink);
+  border-radius: var(--radius-sm);
+  padding: 10px 16px;
   font-size: 0.9rem;
+  font-weight: 500;
+  min-height: 40px;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.08s ease;
 }
 
 button:hover {
   border-color: var(--accent);
 }
 
-input,
-select {
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 8px 10px;
-  font-size: 1rem;
+button:active {
+  transform: scale(0.97);
 }
 
-.auth-page {
-  max-width: 360px;
-  margin: 10vh auto;
-  padding: 24px;
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+  transform: none;
+}
+
+button[type="submit"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+button[type="submit"]:hover {
+  background: #35539c;
+  border-color: #35539c;
+}
+
+/* ---------- Inputs ---------- */
+
+input,
+select,
+textarea {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 1rem;
+  font-family: inherit;
   background: var(--surface);
-  border-radius: 12px;
+  color: var(--ink);
+  min-height: 42px;
+}
+
+textarea {
+  min-height: unset;
+}
+
+input:focus,
+select:focus,
+textarea:focus,
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ---------- Auth / login ---------- */
+
+.auth-page {
+  width: 100%;
+  max-width: 380px;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: 32px 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   text-align: center;
+}
+
+.auth-page h1 {
+  font-size: 1.8rem;
+  margin-bottom: 4px;
 }
 
 .auth-page .tagline {
   color: var(--muted);
-  margin-bottom: 24px;
+  margin-bottom: 28px;
 }
 
 .auth-form {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: 24px 20px;
 }
 
 .auth-form label {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   font-size: 0.85rem;
   color: var(--muted);
+}
+
+.auth-form button[type="submit"] {
+  margin-top: 6px;
 }
 
 .link-button {
   background: none;
   border: none;
   color: var(--accent);
-  margin-top: 16px;
+  margin-top: 20px;
+  font-weight: 500;
 }
+
+/* ---------- App shell + header ---------- */
 
 .app-shell {
   max-width: 760px;
   margin: 0 auto;
-  padding: 24px;
+  min-height: 100dvh;
+  padding: 16px 16px calc(24px + env(safe-area-inset-bottom));
 }
 
 .app-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
   display: flex;
   align-items: center;
-  gap: 24px;
-  margin-bottom: 32px;
+  gap: 16px;
+  padding: 12px 4px;
+  margin: -16px -16px 16px;
+  padding-left: 16px;
+  padding-right: 16px;
+  /* Fallback solid color for browsers without color-mix() support
+     (pre-iOS 16.4 Safari); color-mix() below overrides it where supported. */
+  background: var(--bg);
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
 }
 
 .brand {
   font-weight: 700;
-  font-size: 1.1rem;
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
 }
 
+/* Desktop: inline nav lives in the header. Mobile: replaced by the fixed
+   bottom tab bar below, so hide this one to avoid showing navigation twice. */
 .app-header nav {
-  display: flex;
-  gap: 16px;
+  display: none;
+  gap: 18px;
   flex: 1;
 }
 
 .app-header nav a {
   color: var(--muted);
   text-decoration: none;
+  font-size: 0.9rem;
   padding: 4px 0;
   border-bottom: 2px solid transparent;
 }
@@ -110,18 +226,71 @@ select {
 .app-header nav a.active {
   color: var(--ink);
   border-bottom-color: var(--accent);
+  font-weight: 600;
 }
 
 .user-area {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   color: var(--muted);
   font-size: 0.85rem;
+  margin-left: auto;
 }
+
+.user-area button {
+  padding: 6px 12px;
+  min-height: 34px;
+  font-size: 0.8rem;
+}
+
+/* ---------- Bottom tab bar (mobile) ---------- */
+
+.bottom-nav {
+  display: flex;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  background: var(--surface);
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border-top: 1px solid var(--border);
+  padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+}
+
+.bottom-nav a {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  text-decoration: none;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 500;
+  padding: 6px 2px;
+  border-radius: var(--radius-sm);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.bottom-nav a svg {
+  width: 22px;
+  height: 22px;
+  stroke: currentColor;
+}
+
+.bottom-nav a.active {
+  color: var(--accent);
+}
+
+/* ---------- Page content ---------- */
 
 .page h1 {
   margin-bottom: 4px;
+  font-size: 1.4rem;
 }
 
 .orientation {
@@ -133,6 +302,8 @@ select {
   font-size: 0.85rem;
 }
 
+/* ---------- Quick capture ---------- */
+
 .quick-capture {
   display: flex;
   gap: 8px;
@@ -141,7 +312,17 @@ select {
 
 .quick-capture input {
   flex: 1;
+  border-radius: 999px;
+  padding: 11px 16px;
 }
+
+.quick-capture button[type="submit"] {
+  border-radius: 999px;
+  padding: 10px 20px;
+  white-space: nowrap;
+}
+
+/* ---------- Task list ---------- */
 
 .task-list {
   list-style: none;
@@ -149,20 +330,35 @@ select {
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .task-row {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  padding: 14px;
+  box-shadow: var(--shadow-sm);
 }
 
 .task-row-top {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
+  flex-wrap: wrap;
+}
+
+.task-row-top input[type="checkbox"] {
+  margin-top: 3px;
+  min-height: unset;
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+
+.task-row.done {
+  opacity: 0.7;
 }
 
 .task-row.done .task-title {
@@ -172,13 +368,16 @@ select {
 
 .task-row-main {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .task-title {
   cursor: text;
+  font-size: 0.98rem;
+  word-break: break-word;
 }
 
 .task-title-edit {
@@ -195,23 +394,50 @@ select {
   font-size: 0.72rem;
   border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 2px 8px;
+  padding: 3px 9px;
   color: var(--muted);
+  white-space: nowrap;
 }
 
 .pill.deadline {
   color: var(--danger);
   border-color: var(--danger);
+  background: var(--danger-soft);
 }
 
 .pill.importance-high {
   color: var(--accent);
   border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
+.pill.waiting {
+  color: #9a7116;
+  border-color: #e4ce9a;
+  background: #fbf3e0;
+}
+
+.pill.recurring {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* Full-width action row: flex-basis 100% forces it onto its own line
+   inside the wrapping .task-row-top flex container, on every screen
+   size, without needing a media query. */
 .task-actions {
   display: flex;
   gap: 6px;
+  flex-wrap: wrap;
+  flex-basis: 100%;
+  margin-top: 2px;
+}
+
+.task-actions button {
+  font-size: 0.78rem;
+  padding: 6px 12px;
+  min-height: 32px;
 }
 
 .completed-section {
@@ -222,22 +448,35 @@ select {
   cursor: pointer;
   color: var(--muted);
   margin-bottom: 8px;
+  -webkit-tap-highlight-color: transparent;
 }
+
+/* ---------- Create / filter forms ---------- */
 
 .inline-create-form-wrapper {
   margin-bottom: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  box-shadow: var(--shadow-sm);
 }
 
 .inline-create-form,
 .filters {
   display: flex;
   gap: 8px;
-  margin-bottom: 16px;
+  margin-bottom: 0;
   flex-wrap: wrap;
+}
+
+.filters {
+  margin-bottom: 16px;
 }
 
 .inline-create-form input {
   flex: 1;
+  min-width: 140px;
 }
 
 .checkbox-label {
@@ -251,7 +490,13 @@ select {
 
 .checkbox-label input {
   padding: 0;
+  min-height: unset;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
 }
+
+/* ---------- Buckets ---------- */
 
 .bucket-list {
   list-style: none;
@@ -267,8 +512,9 @@ select {
   gap: 10px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  box-shadow: var(--shadow-sm);
 }
 
 .bucket-list li.archived {
@@ -276,26 +522,30 @@ select {
 }
 
 .bucket-dot {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   display: inline-block;
+  flex-shrink: 0;
 }
 
 .bucket-list li > span:nth-child(2) {
   flex: 1;
 }
 
+/* ---------- Task details / recurrence ---------- */
+
 .task-edit-panel,
 .create-details-panel {
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid var(--border);
+  flex-basis: 100%;
 }
 
 .task-details-fields {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
 }
 
@@ -333,11 +583,13 @@ select {
 .weekday-picker {
   display: flex;
   gap: 4px;
+  flex-wrap: wrap;
 }
 
 .weekday-picker .weekday {
-  padding: 4px 8px;
+  padding: 6px 9px;
   font-size: 0.75rem;
+  min-height: unset;
 }
 
 .weekday-picker .weekday.active {
@@ -357,6 +609,7 @@ select {
   color: var(--accent);
   padding: 0;
   font-size: 0.85rem;
+  min-height: unset;
 }
 
 .muted {
@@ -370,4 +623,27 @@ select {
 .center {
   text-align: center;
   margin-top: 10vh;
+}
+
+/* ---------- Responsive: desktop gets the inline header nav back,
+   and loses the fixed bottom tab bar ---------- */
+
+@media (min-width: 681px) {
+  .app-header nav {
+    display: flex;
+  }
+
+  .bottom-nav {
+    display: none;
+  }
+
+  .app-shell {
+    padding-bottom: 24px;
+  }
+}
+
+@media (max-width: 680px) {
+  .app-shell {
+    padding-bottom: calc(var(--nav-height) + env(safe-area-inset-bottom) + 16px);
+  }
 }
