@@ -2,7 +2,7 @@
 
 ## Overview
 
-"Working Title" is an adaptive personal assistant that reduces the cognitive load
+"Taskr" is an adaptive personal assistant that reduces the cognitive load
 of tracking commitments. Phase 1 scope (this document reflects Phase 1 + future
 hooks): a REST API backend backed by PostgreSQL, with a minimal web client used
 for development and daily-driving the app until the native iOS client (Phase 3)

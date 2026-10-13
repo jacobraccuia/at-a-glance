@@ -1,6 +1,6 @@
 {
-  "name": "Working Title",
-  "short_name": "Working Title",
+  "name": "Taskr",
+  "short_name": "Taskr",
   "description": "A calm, adaptive personal assistant for tracking life's commitments.",
   "start_url": "/today",
   "display": "standalone",

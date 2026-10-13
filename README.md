@@ -1,4 +1,4 @@
-# Working Title
+# Taskr
 
 An adaptive personal assistant for tracking life's commitments without the
 cognitive overhead. See `CURSOR_MASTER_PROMPT.md` for the full product spec
