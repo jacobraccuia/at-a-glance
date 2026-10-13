@@ -5,10 +5,16 @@ cognitive overhead. See `CURSOR_MASTER_PROMPT.md` for the full product spec
 and `docs/` for architecture, data model, implementation plan, integrations,
 and privacy documentation.
 
-**Status:** Phase 1 (Real core MVP) complete — backend API fully tested
-(16/16 tests passing), minimal web client manually verified end-to-end.
-Native iOS app, AI assistant, calendar/email integrations are later phases
-(see `docs/implementation-plan.md`).
+**Status:** Phase 1 (Real core MVP) complete and deployed. Phase 2 core
+slice in progress — AI-assisted quick capture (OpenAI-backed bucket /
+importance / estimate / rough-date suggestions, with a fully deterministic
+fallback when no API key is set) is live; see `docs/implementation-plan.md`
+for exactly what's built vs. explicitly deferred. Backend fully tested
+(20/20 tests passing). Native iOS app and deeper assistant features
+(voice, conversational commands, calendar/email integrations) are later
+phases.
+
+**Live:** https://server-production-1374.up.railway.app
 
 ## Prerequisites
 
@@ -36,6 +42,10 @@ npm run prisma:migrate   # applies migrations, creates schema
 npm run seed              # creates demo@example.com / password123 with sample data
 npm run dev                # starts API on http://localhost:4100
 ```
+
+To enable AI-assisted quick capture locally, set `OPENAI_API_KEY` in
+`server/.env`. Leave it unset to run fully deterministic (no external
+calls) — this is a real, tested fallback path, not a degraded mode.
 
 Run tests (unit + integration, against the real database):
 
@@ -75,5 +85,8 @@ docker-compose.yml         Local Postgres for development
   like Local.app); the API runs on 4100.
 - Port 5432 is intentionally avoided for the same reason; Postgres runs on
   5433 locally (see `docker-compose.yml`).
-- No AI/LLM integration exists yet — Phase 1 capture is deterministic (plain
-  text → task title, no fabricated deadlines/estimates).
+- AI integration (Phase 2 core slice): quick capture is OpenAI-assisted when
+  `OPENAI_API_KEY` is set, and purely deterministic otherwise. The model only
+  *suggests* structured fields; the server always decides what's actually
+  written to the database, and AI-set dates are never marked as explicit
+  deadlines.
