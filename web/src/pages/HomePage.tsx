@@ -5,6 +5,15 @@ import { branding } from "../config/branding";
 import { ArrowRightIcon, MicIcon } from "../components/icons";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 
+interface EasyWin {
+  id: string;
+  title: string;
+  estimateMinutes: number | null;
+  assumedMinutes: number;
+  importance: string;
+  score: number;
+}
+
 interface ExecutedAction {
   type: string;
   ok: boolean;
@@ -12,6 +21,8 @@ interface ExecutedAction {
   taskId?: string;
   taskTitle?: string;
   undo?: { kind: "complete" | "drop" | "snooze" | "reopen"; taskId: string };
+  easyWins?: EasyWin[];
+  minutes?: number;
 }
 
 interface ChatMessage {
@@ -23,24 +34,31 @@ interface ChatMessage {
 
 interface Conversation {
   id: string;
-  messages: ChatMessage[];
+  messages: Array<{
+    id: string;
+    role: "user" | "assistant";
+    content: string;
+    actions?: ExecutedAction[] | null;
+  }>;
 }
 
 const SUGGESTIONS = [
+  "I have 25 minutes — what can I knock out?",
   "What's on today?",
-  "Remind me to call Mom every Monday",
   "Cancel the drop party task",
   "I just watered the plants",
   "Snooze that package until Thursday",
 ];
 
-export function AssistantPage() {
+export function HomePage() {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [easyWins, setEasyWins] = useState<EasyWin[]>([]);
+  const [easyWinsMinutes, setEasyWinsMinutes] = useState(25);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -60,6 +78,18 @@ export function AssistantPage() {
     });
   }, []);
 
+  const loadEasyWins = useCallback((minutes = 25) => {
+    api
+      .get<{ minutes: number; wins: EasyWin[] }>(`/assistant/easy-wins?minutes=${minutes}`)
+      .then((r) => {
+        setEasyWins(r.wins);
+        setEasyWinsMinutes(r.minutes);
+      })
+      .catch(() => {
+        /* non-fatal — home still works without the strip */
+      });
+  }, []);
+
   useEffect(() => {
     api
       .get<Conversation>("/assistant/conversation")
@@ -70,13 +100,14 @@ export function AssistantPage() {
             id: m.id,
             role: m.role,
             content: m.content,
-            actions: (m.actions as ExecutedAction[] | null) ?? null,
+            actions: m.actions ?? null,
           }))
         );
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, []);
+    loadEasyWins(25);
+  }, [loadEasyWins]);
 
   useEffect(() => {
     scrollToBottom();
@@ -91,14 +122,13 @@ export function AssistantPage() {
     setDraft("");
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
-    // Optimistic user bubble.
     const tempId = `temp-${Date.now()}`;
     setMessages((prev) => [...prev, { id: tempId, role: "user", content: trimmed }]);
 
     try {
       const res = await api.post<{
         conversationId: string;
-        message: ChatMessage;
+        message: { id: string; content: string };
         executed: ExecutedAction[];
       }>("/assistant/message", { text: trimmed, conversationId: conversationId ?? undefined });
       setConversationId(res.conversationId);
@@ -112,6 +142,11 @@ export function AssistantPage() {
           actions: res.executed,
         },
       ]);
+      // Refresh the home strip after any mutation.
+      if (res.executed.some((e) => e.ok && ["create_tasks", "complete", "drop", "snooze", "reopen", "add_to_today", "easy_wins"].includes(e.type))) {
+        const winAction = res.executed.find((e) => e.type === "easy_wins" && e.ok);
+        loadEasyWins(winAction?.minutes ?? easyWinsMinutes);
+      }
     } catch (e) {
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
       setError(e instanceof Error ? e.message : "Something went wrong");
@@ -138,15 +173,29 @@ export function AssistantPage() {
       await api.post("/assistant/undo", undo);
       setMessages((prev) => [
         ...prev,
-        {
-          id: `undo-${Date.now()}`,
-          role: "assistant",
-          content: "Undone.",
-          actions: null,
-        },
+        { id: `undo-${Date.now()}`, role: "assistant", content: "Undone.", actions: null },
       ]);
+      loadEasyWins(easyWinsMinutes);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Undo failed");
+    }
+  }
+
+  async function completeWin(win: EasyWin) {
+    try {
+      await api.post(`/tasks/${win.id}/complete`);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `win-${Date.now()}`,
+          role: "assistant",
+          content: `Nice — marked "${win.title}" done.`,
+          actions: [{ type: "complete", ok: true, summary: `Marked "${win.title}" done`, taskId: win.id, taskTitle: win.title, undo: { kind: "complete", taskId: win.id } }],
+        },
+      ]);
+      loadEasyWins(easyWinsMinutes);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't complete that");
     }
   }
 
@@ -156,29 +205,55 @@ export function AssistantPage() {
       setConversationId(c.id);
       setMessages([]);
       setError(null);
+      loadEasyWins(25);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't start a new chat");
     }
   }
 
+  function winsFromMessage(m: ChatMessage): EasyWin[] {
+    return m.actions?.find((a) => a.type === "easy_wins" && a.ok)?.easyWins ?? [];
+  }
+
   if (loading) return <p className="muted">Loading...</p>;
 
   return (
-    <div className="page assistant-page">
+    <div className="page assistant-page home-page">
       <header className="assistant-header">
         <div>
-          <h1>{branding.assistantName}</h1>
-          <p className="orientation">Talk or type. I can add, finish, cancel, snooze, and catch you up.</p>
+          <h1>{branding.appName}</h1>
+          <p className="orientation">Talk or type. I remember, sort, and help you knock things out.</p>
         </div>
         <button type="button" className="assistant-new" onClick={onNewChat} title="New conversation">
           New chat
         </button>
       </header>
 
+      {messages.length === 0 && easyWins.length > 0 && (
+        <section className="easy-wins-strip" aria-label="Easy wins">
+          <div className="easy-wins-head">
+            <h2>Easy wins</h2>
+            <span className="muted small">~{easyWinsMinutes} min</span>
+          </div>
+          <ul className="easy-wins-list">
+            {easyWins.map((w) => (
+              <li key={w.id}>
+                <button type="button" className="easy-win-chip" onClick={() => completeWin(w)} title="Mark done">
+                  <span className="easy-win-title">{w.title}</span>
+                  <span className="easy-win-meta">
+                    {w.estimateMinutes != null ? `~${w.estimateMinutes}m` : `~${w.assumedMinutes}m?`}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <div className="assistant-thread" ref={scrollerRef}>
         {messages.length === 0 && (
           <div className="assistant-empty">
-            <p className="assistant-empty-lead">What's on your mind?</p>
+            <p className="assistant-empty-lead">What's up?</p>
             <div className="assistant-suggestions">
               {SUGGESTIONS.map((s) => (
                 <button key={s} type="button" className="assistant-suggestion" onClick={() => send(s)} disabled={sending}>
@@ -187,16 +262,31 @@ export function AssistantPage() {
               ))}
             </div>
             <p className="muted small">
-              Prefer a fast dump without chatting? Use <Link to="/today">Quick add on Today</Link>.
+              Lists live under <Link to="/today">Today</Link> if you want the board view.
             </p>
           </div>
         )}
 
         {messages.map((m) => {
           const undoable = m.actions?.filter((a) => a.ok && a.undo) ?? [];
+          const msgWins = winsFromMessage(m);
           return (
             <div key={m.id} className={`assistant-bubble ${m.role}`}>
               <div className="assistant-bubble-body">{m.content}</div>
+              {msgWins.length > 0 && (
+                <ul className="easy-wins-list in-bubble">
+                  {msgWins.map((w) => (
+                    <li key={w.id}>
+                      <button type="button" className="easy-win-chip" onClick={() => completeWin(w)}>
+                        <span className="easy-win-title">{w.title}</span>
+                        <span className="easy-win-meta">
+                          {w.estimateMinutes != null ? `~${w.estimateMinutes}m` : `~${w.assumedMinutes}m?`} · Done
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
               {undoable.length > 0 && (
                 <div className="assistant-undo-row">
                   {undoable.map((a) => (
@@ -237,7 +327,7 @@ export function AssistantPage() {
           onKeyDown={onKeyDown}
           placeholder={speech.listening ? "Listening..." : "What's up?"}
           disabled={sending}
-          aria-label="Message the assistant"
+          aria-label={`Talk to ${branding.assistantName}`}
         />
         <button
           type="button"
@@ -245,23 +335,11 @@ export function AssistantPage() {
           onClick={() => speech.toggle(draft)}
           disabled={sending || !speech.supported}
           aria-label={speech.listening ? "Stop listening" : "Talk"}
-          title={
-            !speech.supported
-              ? "Voice isn't supported in this browser"
-              : speech.listening
-                ? "Stop listening"
-                : "Talk"
-          }
+          title={!speech.supported ? "Voice isn't supported in this browser" : speech.listening ? "Stop listening" : "Talk"}
         >
           <MicIcon />
         </button>
-        <button
-          type="submit"
-          className="capture-submit"
-          disabled={sending || !draft.trim()}
-          aria-label="Send"
-          title="Send (or press Enter)"
-        >
+        <button type="submit" className="capture-submit" disabled={sending || !draft.trim()} aria-label="Send" title="Send (or press Enter)">
           <ArrowRightIcon />
         </button>
       </form>

@@ -26,7 +26,7 @@ export function LoginPage() {
       } else {
         await register(email, password, displayName, timezone);
       }
-      navigate("/assistant");
+      navigate("/");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong");
     } finally {

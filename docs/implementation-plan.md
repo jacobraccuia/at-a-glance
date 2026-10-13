@@ -122,27 +122,31 @@ fallback when no API key is configured or the call fails/times out):
       history persists per user.
 - [x] `POST /api/assistant/message` — shared text/voice intent pipeline.
       Model returns a structured plan (`create_tasks`, `complete`, `drop`,
-      `snooze`, `reopen`, `add_to_today`, `list`, `clarify`, `none`); a
-      separate deterministic executor resolves task references and writes
-      to the DB. Model never touches SQL.
+      `snooze`, `reopen`, `add_to_today`, `list`, `easy_wins`, `clarify`,
+      `none`); a separate deterministic executor resolves task references
+      and writes to the DB. Model never touches SQL.
 - [x] Entity resolution: free-text task queries matched against open tasks
       (title containment / token overlap). Ambiguous matches → clarify,
       never guess the wrong task.
 - [x] One-tap undo for complete / drop / snooze / reopen via
       `POST /api/assistant/undo`.
 - [x] Clarifying questions when the model (or resolver) is unsure.
-- [x] Chat UI at `/assistant` (default post-login route, first nav item) —
-      ChatGPT-style thread, suggestion chips, sticky composer.
-- [x] Mic lives on the **assistant** composer (Web Speech API), not on
+- [x] Chat UI is **home** (`/`) — the assistant IS the app. Thin secondary
+      nav for Today / Upcoming / All / Buckets. `/assistant` redirects to `/`.
+- [x] Mic lives on the **home** composer (Web Speech API), not on
       Today quick-add. Quick-add remains a text-only fast dump.
-- [x] No-AI fallback: raw message becomes a create_tasks dump so the
-      assistant stays usable without an API key.
-- [x] Tests: unit tests for task resolution; integration tests for
-      drop+undo, multi-create via mocked plan, and no-AI fallback.
+- [x] Easy Wins: rules-based ranker (`easyWins.ts`) + `GET /api/assistant/easy-wins`
+      + `easy_wins` assistant action. Home strip + chat replies surface
+      short-budget picks ("I have 25 minutes…"). Transparent scoring, not
+      an opaque AI score.
+- [x] No-AI fallback: recognizes easy-wins / what's-on-today phrasing;
+      otherwise raw message becomes a create_tasks dump.
+- [x] Tests: unit tests for task resolution + Easy Wins ranking + fallback
+      routing; integration tests for drop+undo, multi-create via mocked
+      plan, and no-AI fallback.
 
 **Still deferred within Phase 2 (not claiming these are done):**
-- [ ] "Quick tidy-up" review queue (How long will this take? Still waiting?)
-- [ ] Easy Wins surfacing ("I have 25 minutes…")
+- [ ] "Quick tidy-up" review loop (How long will this take? Still waiting?)
 - [ ] Natural-language recurrence creation ("Every Monday remind me…")
       via the assistant (recurrence still works through the All-tasks form)
 - [ ] Estimate-correction learning signal / `LearnedPreference` /

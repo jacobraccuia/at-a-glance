@@ -10,6 +10,7 @@ import {
 } from "../lib/timezone.js";
 import { parseConversationMessage } from "../lib/assistant/conversationParser.js";
 import { executeAssistantPlan, fallbackPlanFromText } from "../lib/assistant/executor.js";
+import { DEFAULT_EASY_WIN_MINUTES, rankEasyWins } from "../lib/assistant/easyWins.js";
 
 export const assistantRouter = Router();
 assistantRouter.use(requireAuth);
@@ -111,6 +112,8 @@ assistantRouter.post("/message", async (req, res) => {
         attentionDate: t.attentionDate?.toISOString() ?? null,
         hardDeadline: t.hardDeadline?.toISOString() ?? null,
         importance: t.importance,
+        estimateMinutes: t.estimateMinutes,
+        waitingOn: t.waitingOn,
       })),
       history,
     })) ?? fallbackPlanFromText(text);
@@ -143,6 +146,20 @@ assistantRouter.post("/message", async (req, res) => {
     message: assistantMsg,
     executed: result.executed,
   });
+});
+
+// ---------- Easy Wins (also used by the home strip without a chat turn) ----------
+
+assistantRouter.get("/easy-wins", async (req, res) => {
+  const userId = req.session.userId!;
+  const raw = typeof req.query.minutes === "string" ? parseInt(req.query.minutes, 10) : DEFAULT_EASY_WIN_MINUTES;
+  const minutes = Number.isFinite(raw) ? Math.max(1, Math.min(240, raw)) : DEFAULT_EASY_WIN_MINUTES;
+  const openTasks = await prisma.task.findMany({
+    where: { userId, status: { in: ["captured", "active"] } },
+    orderBy: { updatedAt: "desc" },
+    take: 80,
+  });
+  res.json({ minutes, wins: rankEasyWins(openTasks, minutes) });
 });
 
 // ---------- One-tap undo of the last consequential action ----------

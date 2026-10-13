@@ -52,6 +52,13 @@ const AssistantActionSchema = z.discriminatedUnion("type", [
     scope: z.enum(["today", "upcoming", "later", "all"]),
   }),
   z.object({
+    // Surface short, unblocked tasks that fit a time budget ("I have 25 minutes").
+    // The server ranks them with transparent rules -- you just pick this action
+    // and optionally pass the minute budget the user mentioned (null = 25).
+    type: z.literal("easy_wins"),
+    minutes: z.number().int().min(1).max(240).nullable(),
+  }),
+  z.object({
     // Ask the user something instead of guessing. Prefer this over a wrong
     // complete/drop when the task reference is ambiguous.
     type: z.literal("clarify"),
@@ -87,6 +94,8 @@ export interface TaskSnapshot {
   attentionDate: string | null;
   hardDeadline: string | null;
   importance: string;
+  estimateMinutes: number | null;
+  waitingOn: string | null;
 }
 
 export interface ParseConversationContext {
@@ -114,6 +123,8 @@ function formatTaskSnapshot(tasks: TaskSnapshot[]): string {
   return tasks
     .map((t) => {
       const bits = [`id=${t.id}`, `status=${t.status}`, `importance=${t.importance}`];
+      if (t.estimateMinutes != null) bits.push(`~${t.estimateMinutes}m`);
+      if (t.waitingOn) bits.push(`waiting=${t.waitingOn}`);
       if (t.attentionDate) bits.push(`attention=${t.attentionDate.slice(0, 10)}`);
       if (t.hardDeadline) bits.push(`due=${t.hardDeadline.slice(0, 10)}`);
       return `- "${t.title}" (${bits.join(", ")})`;
@@ -157,6 +168,9 @@ export async function parseConversationMessage(
     "- complete / drop / snooze / reopen / add_to_today: set taskQuery to a short phrase from the user's",
     "  words that identifies the task. Prefer clarify if more than one open task could match.",
     "- list: when they ask what's on today / upcoming / later / everything.",
+    "- easy_wins: when they have a short window (\"I have 25 minutes\", \"what can I knock out quick\",",
+    "  \"easy wins\"). Pass minutes if they named a budget, otherwise null (defaults to 25).",
+    "  Do NOT invent which tasks are easy -- the server ranks them with transparent rules.",
     "- clarify: ask ONE short question when you'd otherwise guess wrong. Prefer clarify over a wrong drop/complete.",
     "- none: greetings, thanks, or chat with no side effects.",
     "- You may return multiple actions for multi-intent messages (e.g. create two tasks and snooze another).",

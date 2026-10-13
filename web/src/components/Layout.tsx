@@ -2,10 +2,13 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { branding } from "../config/branding";
 
+// Thin secondary nav. Home (the chat assistant) IS the app; lists are
+// views you duck into, not peers of a separate "Assistant" tab.
 const NAV_ITEMS = [
   {
-    to: "/assistant",
-    label: "Assistant",
+    to: "/",
+    label: "Home",
+    end: true,
     icon: (
       <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -15,6 +18,7 @@ const NAV_ITEMS = [
   {
     to: "/today",
     label: "Today",
+    end: false,
     icon: (
       <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="4" />
@@ -25,6 +29,7 @@ const NAV_ITEMS = [
   {
     to: "/upcoming",
     label: "Upcoming",
+    end: false,
     icon: (
       <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3" y="4" width="18" height="17" rx="2" />
@@ -35,6 +40,7 @@ const NAV_ITEMS = [
   {
     to: "/all",
     label: "All",
+    end: false,
     icon: (
       <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M4 6h16M4 12h16M4 18h16" />
@@ -44,6 +50,7 @@ const NAV_ITEMS = [
   {
     to: "/buckets",
     label: "Buckets",
+    end: false,
     icon: (
       <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M3 7l2-3h14l2 3M3 7h18M3 7v12a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V7" />
@@ -67,7 +74,7 @@ export function Layout() {
         <span className="brand">{branding.appName}</span>
         <nav>
           {NAV_ITEMS.map((item) => (
-            <NavLink key={item.to} to={item.to}>
+            <NavLink key={item.to} to={item.to} end={item.end}>
               {item.label}
             </NavLink>
           ))}
@@ -82,7 +89,7 @@ export function Layout() {
       </main>
       <nav className="bottom-nav">
         {NAV_ITEMS.map((item) => (
-          <NavLink key={item.to} to={item.to}>
+          <NavLink key={item.to} to={item.to} end={item.end}>
             {item.icon}
             {item.label}
           </NavLink>

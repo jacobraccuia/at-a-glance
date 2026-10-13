@@ -6,6 +6,7 @@ import type { PrismaClient, Task } from "@prisma/client";
 import { logTaskEvent } from "../taskEvents.js";
 import { addDaysToDateString, startOfDayInTimeZone } from "../timezone.js";
 import type { AssistantAction, AssistantPlan, CaptureItem } from "./conversationParser.js";
+import { DEFAULT_EASY_WIN_MINUTES, formatEasyWinsSummary, rankEasyWins, type EasyWin } from "./easyWins.js";
 
 export interface ExecutedAction {
   type: string;
@@ -15,6 +16,9 @@ export interface ExecutedAction {
   taskTitle?: string;
   // For one-tap undo of the most recent consequential mutation.
   undo?: { kind: "complete" | "drop" | "snooze" | "reopen"; taskId: string };
+  /** Populated by easy_wins so the UI can show tappable suggestions. */
+  easyWins?: EasyWin[];
+  minutes?: number;
 }
 
 export interface ExecutionResult {
@@ -152,6 +156,20 @@ async function runAction(action: AssistantAction, ctx: ExecContext, openTasks: T
           ? `Nothing in ${action.scope}.`
           : `${action.scope}: ${titles.map((t) => `"${t}"`).join(", ")}${filtered.length > 12 ? ` (+${filtered.length - 12} more)` : ""}`;
       return [{ type: "list", ok: true, summary }];
+    }
+
+    case "easy_wins": {
+      const minutes = action.minutes ?? DEFAULT_EASY_WIN_MINUTES;
+      const wins = rankEasyWins(openTasks, minutes);
+      return [
+        {
+          type: "easy_wins",
+          ok: true,
+          summary: formatEasyWinsSummary(wins, minutes),
+          easyWins: wins,
+          minutes,
+        },
+      ];
     }
 
     case "create_tasks": {
@@ -337,20 +355,45 @@ export async function executeAssistantPlan(plan: AssistantPlan, ctx: ExecContext
     reply = `${reply}\n\n${changeSummaries.map((s) => `• ${s}`).join("\n")}`;
   }
 
-  // List actions: if the model reply is thin, use the list summary.
+  // List / easy_wins: append the concrete summary so the user sees the picks.
   const list = executed.find((e) => e.type === "list" && e.ok);
   if (list && plan.actions.length === 1) {
     reply = `${plan.reply}\n\n${list.summary}`;
+  }
+  const wins = executed.find((e) => e.type === "easy_wins" && e.ok);
+  if (wins && plan.actions.every((a) => a.type === "easy_wins" || a.type === "none")) {
+    reply = `${plan.reply}\n\n${wins.summary}`;
   }
 
   return { reply, executed };
 }
 
 /**
- * Deterministic no-AI fallback: treat the message as a capture dump
- * (one task, or one per newline). Keeps the assistant usable offline.
+ * Deterministic no-AI fallback. Recognizes a few obvious intents
+ * (easy wins / what's on today) so the home surface still helps without
+ * an API key; otherwise treats the message as a capture dump.
  */
 export function fallbackPlanFromText(text: string): AssistantPlan {
+  const lower = text.toLowerCase();
+
+  const minutesMatch = lower.match(/(\d+)\s*(minutes?|mins?|m)\b/);
+  if (
+    /\beasy wins?\b/.test(lower) ||
+    /\bknock out\b/.test(lower) ||
+    /\bquick wins?\b/.test(lower) ||
+    (minutesMatch && /\b(have|got|only)\b/.test(lower))
+  ) {
+    const minutes = minutesMatch ? parseInt(minutesMatch[1], 10) : null;
+    return {
+      reply: "Here are some easy wins.",
+      actions: [{ type: "easy_wins", minutes }],
+    };
+  }
+
+  if (/\bwhat('s| is) on today\b/.test(lower) || /\btoday'?s (list|tasks?)\b/.test(lower)) {
+    return { reply: "Here's today.", actions: [{ type: "list", scope: "today" }] };
+  }
+
   const lines = text
     .split("\n")
     .map((l) => l.trim())

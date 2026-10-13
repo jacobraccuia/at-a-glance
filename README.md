@@ -5,10 +5,11 @@ cognitive overhead. See `CURSOR_MASTER_PROMPT.md` for the full product spec
 and `docs/` for architecture, data model, implementation plan, integrations,
 and privacy documentation.
 
-**Status:** Phase 1 complete. Phase 2 assistant is the primary surface —
-conversational chat at `/assistant` (text + in-app mic) that can create,
-complete, cancel, snooze, list, and clarify, with persisted conversation
-history and one-tap undo. Today still has a text-only quick-add dump.
+**Status:** Phase 1 complete. Phase 2 assistant **is** the app — home (`/`)
+is conversational chat (text + in-app mic) that can create, complete,
+cancel, snooze, list, clarify, and surface **Easy Wins** (rules-based
+picks that fit a short time budget). Thin secondary nav for Today /
+Upcoming / All / Buckets. Today still has a text-only quick-add dump.
 See `docs/implementation-plan.md` for built vs. still-deferred Phase 2
 items. Native iOS / Siri / Watch are Phase 3.
 

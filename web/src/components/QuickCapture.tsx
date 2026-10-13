@@ -4,7 +4,7 @@ import { ArrowRightIcon } from "./icons";
 
 // Fast dump surface on Today -- one or many tasks via text. The real
 // conversational assistant (voice + commands like "cancel that task")
-// lives on /assistant. Keeping this box intentionally simple.
+// lives on Home (/). Keeping this box intentionally simple.
 const MAX_ROWS = 8;
 
 export function QuickCapture({ onCaptured, addToToday }: { onCaptured: () => void; addToToday?: boolean }) {

@@ -559,6 +559,78 @@ button:focus-visible {
   min-height: 44px;
 }
 
+/* ---------- Easy Wins ---------- */
+
+.easy-wins-strip {
+  margin: 4px 0 12px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.easy-wins-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.easy-wins-head h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.easy-wins-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.easy-wins-list.in-bubble {
+  margin-top: 2px;
+}
+
+.easy-win-chip {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  text-align: left;
+  padding: 10px 12px;
+  min-height: unset;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--ink);
+}
+
+.easy-win-chip:hover {
+  border-color: var(--accent);
+}
+
+.easy-win-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.9rem;
+  font-weight: 500;
+  word-break: break-word;
+}
+
+.easy-win-meta {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  color: var(--accent);
+  font-weight: 600;
+}
+
 /* ---------- Task list ---------- */
 
 .task-list {
