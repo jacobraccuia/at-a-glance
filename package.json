@@ -1,0 +1,10 @@
+{
+  "name": "taskr",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Production deploy entrypoint only. Each of server/ and web/ is developed and run independently in local dev -- see README.md.",
+  "scripts": {
+    "build": "npm --prefix web ci && npm --prefix web run build && npm --prefix server ci && npm --prefix server run build",
+    "start": "npm --prefix server start"
+  }
+}

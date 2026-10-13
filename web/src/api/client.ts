@@ -1,3 +1,6 @@
+// In production the API is served from the same origin as this web app
+// (same Railway service), so a relative path is correct and keeps cookies
+// same-site. Local dev still points at the standalone API server on 4100.
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:4100/api";
 
 export class ApiError extends Error {
