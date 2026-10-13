@@ -1,14 +1,25 @@
 :root {
-  --bg: #faf9f6;
+  /* Palette notes: shifted the old flat grey (--muted was a true neutral
+     grey, --ink was near-black) toward a slate-blue undertone that pairs
+     with --accent, and deepened --accent/--success slightly so completed/
+     important states feel more alive. Research basis: blue reads as the
+     most universally "trusted + calm" color (why most productivity/health/
+     finance apps lean blue); desaturated *warm or cool-tinted* neutrals
+     read as more human than flat grey; a slightly more saturated success
+     green gives a small positive hit on completion, which matters for
+     habit formation / return visits. This is a deliberate first pass --
+     a proper theme-preset system (+ time-of-day mood gradients) is a
+     separate, larger follow-up, not done here. */
+  --bg: #f7f6f2;
   --surface: #ffffff;
-  --ink: #2b2b2b;
-  --muted: #7a7a7a;
-  --accent: #4062bb;
-  --accent-soft: #ebf0fb;
-  --border: #e4e1da;
-  --danger: #b3432b;
-  --danger-soft: #fbeae5;
-  --success: #3f8f5f;
+  --ink: #23262b;
+  --muted: #68707c;
+  --accent: #3955c7;
+  --accent-soft: #ecf0fd;
+  --border: #e3e0d8;
+  --danger: #c0392b;
+  --danger-soft: #fbece7;
+  --success: #2f9e6e;
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 18px;
@@ -85,8 +96,8 @@ button[type="submit"] {
 }
 
 button[type="submit"]:hover {
-  background: #35539c;
-  border-color: #35539c;
+  background: #2c429e;
+  border-color: #2c429e;
 }
 
 /* ---------- Inputs ---------- */
@@ -435,12 +446,11 @@ button:focus-visible {
 
 .task-row-top {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 12px;
 }
 
 .task-row-top input[type="checkbox"] {
-  margin-top: 3px;
   min-height: unset;
   width: 20px;
   height: 20px;
