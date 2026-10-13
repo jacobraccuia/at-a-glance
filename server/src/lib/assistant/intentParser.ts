@@ -73,10 +73,13 @@ export interface ParseCaptureContext {
    *  model's day-offset is computed relative to the right day. */
   todayISO: string;
   /** Weekday name for todayISO (e.g. "Tuesday"). Given explicitly so the
-   *  model never has to derive day-of-week from a bare ISO date itself --
-   *  that calculation is exactly the kind of silent LLM date-math error
-   *  this design is meant to avoid (see "next Friday" bug, Phase 2 smoke test). */
+   *  model never has to derive day-of-week from a bare ISO date itself. */
   todayWeekday: string;
+  /** Pre-computed map of weekday → days-from-today for the soonest
+   *  strictly-future occurrence of each weekday. The model MUST look
+   *  offsets up here rather than computing them -- LLMs silently get
+   *  weekday arithmetic wrong (verified twice in Phase 2 smoke tests). */
+  upcomingWeekdayOffsets: Record<string, number>;
   /** This user's existing, non-archived bucket names. The model may only
    *  choose from this list (or null) -- never invent a new one. */
   bucketNames: string[];
@@ -97,11 +100,20 @@ function getClient(): OpenAI | null {
 }
 
 function buildSystemPrompt(context: ParseCaptureContext): string {
+  // Pre-formatted lookup table so the model never has to do day-of-week
+  // arithmetic. Example: "Friday=3, Saturday=4, ..."
+  const offsetTable = Object.entries(context.upcomingWeekdayOffsets)
+    .map(([day, offset]) => `${day}=${offset}`)
+    .join(", ");
+
   return (
     "Be conservative: when unsure, prefer null over guessing. Never fabricate a deadline the user didn't imply. " +
     `Today's reference date is ${context.todayISO} (a ${context.todayWeekday}). ` +
-    "When the text says \"next <weekday>\", treat it as the soonest upcoming occurrence of that weekday " +
-    "strictly after today (if today itself is that weekday, use the one 7 days later, not today). " +
+    "When the text names a weekday (\"Friday\", \"next Friday\", \"this Friday\", \"on Monday\"), " +
+    "set dateDaysFromNow to the matching value from this pre-computed lookup table -- do NOT compute the offset yourself: " +
+    `${offsetTable}. ` +
+    "(\"this Friday\" and \"next Friday\" both use the same soonest-upcoming Friday from the table; " +
+    "the linguistic distinction is too ambiguous to resolve otherwise.) " +
     `Existing buckets the user can be matched to (choose exactly one of these or null, never invent a new one): ${
       context.bucketNames.length > 0 ? context.bucketNames.join(", ") : "(none yet)"
     }.`

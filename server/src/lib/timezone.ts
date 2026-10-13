@@ -17,6 +17,33 @@ export function getWeekdayName(dateStr: string): string {
   return new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: "UTC" }).format(date);
 }
 
+/**
+ * Map of weekday name → days-from-today for the soonest strictly-future
+ * occurrence of that weekday. Used by the intent parser so the LLM never
+ * has to compute day-of-week offsets itself (LLMs are unreliable at that;
+ * verified twice in Phase 2 smoke tests -- "next Friday" on a Tuesday
+ * silently resolved to the Friday of *next* week instead of this week's).
+ *
+ * "This Friday" and "next Friday" both map to the same soonest upcoming
+ * Friday under this table; the linguistic distinction is too ambiguous
+ * cross-speaker to ask the model to resolve, so we pick the conservative
+ * (soonest) interpretation for both.
+ *
+ * Example: if today is Tuesday, returns
+ *   { Wednesday: 1, Thursday: 2, Friday: 3, Saturday: 4, Sunday: 5,
+ *     Monday: 6, Tuesday: 7 }.
+ */
+export function getUpcomingWeekdayOffsets(dateStr: string): Record<string, number> {
+  const todayName = getWeekdayName(dateStr);
+  const order = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const todayIdx = order.indexOf(todayName);
+  const offsets: Record<string, number> = {};
+  for (let i = 1; i <= 7; i++) {
+    offsets[order[(todayIdx + i) % 7]] = i;
+  }
+  return offsets;
+}
+
 export function addDaysToDateString(dateStr: string, days: number): string {
   const [y, m, d] = dateStr.split("-").map(Number);
   const date = new Date(Date.UTC(y, m - 1, d));

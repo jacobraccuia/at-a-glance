@@ -8,6 +8,7 @@ import {
   addDaysToDateString,
   endOfDayInTimeZone,
   getCurrentDateInTimeZone,
+  getUpcomingWeekdayOffsets,
   getWeekdayName,
   startOfDayInTimeZone,
 } from "../lib/timezone.js";
@@ -259,7 +260,12 @@ tasksRouter.post("/quick-capture", async (req, res) => {
   // back to a purely deterministic split: one task per non-empty line.
   // A single line with no newlines just becomes one task, identical to
   // the original Phase 1 behavior -- zero regression for that case.
-  const multiIntent = await parseMultiCaptureText(text, { todayISO, todayWeekday, bucketNames });
+  const multiIntent = await parseMultiCaptureText(text, {
+    todayISO,
+    todayWeekday,
+    upcomingWeekdayOffsets: getUpcomingWeekdayOffsets(todayISO),
+    bucketNames,
+  });
 
   let rawItems: string[];
   let intents: (CaptureIntent | null)[];
