@@ -95,6 +95,12 @@ export async function parseCaptureText(text: string, context: ParseCaptureContex
     const completion = await client.chat.completions.create(
       {
         model: "gpt-4o-mini",
+        // This is a structured-extraction task, not a creative one -- pin
+        // temperature to 0 for consistent, repeatable field detection.
+        // (Verified during Phase 2 smoke testing: at default temperature,
+        // identical input to this exact prompt missed an explicit "next
+        // friday" date reference in 3 of 4 back-to-back calls.)
+        temperature: 0,
         messages: [
           {
             role: "system",
