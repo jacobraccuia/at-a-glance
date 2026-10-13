@@ -57,6 +57,11 @@ export interface ParseCaptureContext {
   /** Reference "today" date (YYYY-MM-DD, in the user's own timezone) so the
    *  model's day-offset is computed relative to the right day. */
   todayISO: string;
+  /** Weekday name for todayISO (e.g. "Tuesday"). Given explicitly so the
+   *  model never has to derive day-of-week from a bare ISO date itself --
+   *  that calculation is exactly the kind of silent LLM date-math error
+   *  this design is meant to avoid (see "next Friday" bug, Phase 2 smoke test). */
+  todayWeekday: string;
   /** This user's existing, non-archived bucket names. The model may only
    *  choose from this list (or null) -- never invent a new one. */
   bucketNames: string[];
@@ -96,7 +101,9 @@ export async function parseCaptureText(text: string, context: ParseCaptureContex
             content:
               "You extract structured task metadata from a single line of free-form text a user typed into a quick-capture box. " +
               "Be conservative: when unsure, prefer null over guessing. Never fabricate a deadline the user didn't imply. " +
-              `Today's reference date is ${context.todayISO}. ` +
+              `Today's reference date is ${context.todayISO} (a ${context.todayWeekday}). ` +
+              "When the text says \"next <weekday>\", treat it as the soonest upcoming occurrence of that weekday " +
+              "strictly after today (if today itself is that weekday, use the one 7 days later, not today). " +
               `Existing buckets the user can be matched to (choose exactly one of these or null, never invent a new one): ${
                 context.bucketNames.length > 0 ? context.bucketNames.join(", ") : "(none yet)"
               }.`,

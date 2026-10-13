@@ -9,6 +9,14 @@ export function getCurrentDateInTimeZone(tz: string, now: Date = new Date()): st
   return new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(now); // "YYYY-MM-DD"
 }
 
+/** Weekday name (e.g. "Tuesday") for a YYYY-MM-DD date string, timezone-agnostic
+ *  since the date string is already a resolved local calendar date. */
+export function getWeekdayName(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  return new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: "UTC" }).format(date);
+}
+
 export function addDaysToDateString(dateStr: string, days: number): string {
   const [y, m, d] = dateStr.split("-").map(Number);
   const date = new Date(Date.UTC(y, m - 1, d));

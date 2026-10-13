@@ -4,7 +4,13 @@ import { prisma } from "../db/client.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { logTaskEvent } from "../lib/taskEvents.js";
 import { generateOccurrenceDates } from "../lib/recurrence.js";
-import { addDaysToDateString, endOfDayInTimeZone, getCurrentDateInTimeZone, startOfDayInTimeZone } from "../lib/timezone.js";
+import {
+  addDaysToDateString,
+  endOfDayInTimeZone,
+  getCurrentDateInTimeZone,
+  getWeekdayName,
+  startOfDayInTimeZone,
+} from "../lib/timezone.js";
 import { parseCaptureText } from "../lib/assistant/intentParser.js";
 
 export const tasksRouter = Router();
@@ -171,6 +177,7 @@ tasksRouter.post("/quick-capture", async (req, res) => {
   const buckets = await prisma.bucket.findMany({ where: { userId, archivedAt: null } });
   const intent = await parseCaptureText(text, {
     todayISO,
+    todayWeekday: getWeekdayName(todayISO),
     bucketNames: buckets.map((b) => b.name),
   });
 
