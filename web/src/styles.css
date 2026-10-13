@@ -317,6 +317,7 @@ button:focus-visible {
 
 .quick-capture {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-end;
   gap: 8px;
   margin: 16px 0 24px;
@@ -334,7 +335,8 @@ button:focus-visible {
   overflow-y: auto;
 }
 
-.capture-submit {
+.capture-submit,
+.capture-mic {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -346,10 +348,46 @@ button:focus-visible {
   flex-shrink: 0;
 }
 
-.capture-submit svg {
+.capture-submit svg,
+.capture-mic svg {
   width: 20px;
   height: 20px;
   stroke: currentColor;
+}
+
+.capture-mic {
+  color: var(--muted);
+  background: var(--surface);
+}
+
+.capture-mic:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.capture-mic.listening {
+  color: #fff;
+  background: var(--danger);
+  border-color: var(--danger);
+  /* Soft pulse so "I'm listening" is obvious without being noisy. */
+  animation: mic-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes mic-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger) 45%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--danger) 0%, transparent);
+  }
+}
+
+.capture-mic-error {
+  flex-basis: 100%;
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  color: var(--danger);
 }
 
 /* ---------- Task list ---------- */

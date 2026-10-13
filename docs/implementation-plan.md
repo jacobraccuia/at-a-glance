@@ -118,9 +118,14 @@ fallback when no API key is configured or the call fails/times out):
         blocking confirmation screen.
 
 **Explicitly deferred — not in this pass, listed so nothing is assumed done:**
-- [ ] Voice dictation/transcription (text-only for now; this is the explicit
-      bridge toward a Siri/Watch-style "talk to it" entry point, but that
-      requires a native app — see Phase 3)
+- [x] In-app mic on the quick-capture box (Web Speech API —
+      `SpeechRecognition` / `webkitSpeechRecognition`). Tap to talk, tap
+      again to stop; interim transcripts stream into the same textarea so
+      it feels built-in rather than "use the keyboard mic." Unsupported
+      browsers get a disabled mic with an explanatory tooltip; permission
+      denial surfaces as an inline error. Still not Siri/Watch (that needs
+      a native app — see Phase 3), and still not server-side Whisper —
+      those remain deferred if Web Speech proves flaky on a specific device.
 - [ ] Conversational/chat-based commands (e.g. "snooze the promoter task" via
       natural language) — all non-capture actions are still direct UI buttons
 - [ ] Clarifying questions when the model is unsure (it just omits the
