@@ -89,11 +89,38 @@ fallback when no API key is configured or the call fails/times out):
       origin tagging, and the "explicit addToToday wins" rule. All 9
       pre-existing tests still pass unmodified with no API key configured,
       proving zero regression to the deterministic fallback path.
+- [x] **Multi-intent capture**: one quick-capture submission can now produce
+      *several* tasks, not just one. `parseMultiCaptureText()` lets the
+      model decide whether the input is one task or several (line breaks,
+      "and"/commas joining distinct actions, back-to-back statements all
+      count) and extracts the same per-task fields independently for each
+      one (capped at 20). The quick-capture box is now a multi-line textarea
+      (Enter submits, Shift+Enter for an explicit new line) so it reads as
+      "dump everything, I'll sort it out" rather than one-task-at-a-time
+      form filling.
+  - [x] Deterministic fallback (no API key / AI failure): splits the input
+        on newlines into one task per non-empty line, capped at 20 lines —
+        zero AI involvement, zero invented fields, identical in spirit to
+        the single-task fallback. A single line with no newlines still
+        produces exactly one task, byte-for-byte the original Phase 1
+        behavior.
+  - [x] `POST /tasks/quick-capture` now always returns an array (even for a
+        single task) rather than branching response shapes.
+  - [x] Tests: 2 new integration tests — one exercising the real
+        newline-based deterministic fallback (no mock), one mocking a
+        3-item AI split and asserting each task's fields stayed independent
+        (importance/estimate/deadline didn't leak between tasks). 22/22
+        total passing.
+  - [x] No separate "review before create" step — tasks are created
+        immediately like single-capture always has been; reviewing/fixing a
+        bad split happens via the normal editable task list (swipe, Details
+        panel, inline rename), by explicit user choice over adding a
+        blocking confirmation screen.
 
 **Explicitly deferred — not in this pass, listed so nothing is assumed done:**
-- [ ] Voice dictation/transcription (text-only for now)
-- [ ] Multi-intent messages ("and also remind me to..." in one capture — one
-      capture currently always produces exactly one task)
+- [ ] Voice dictation/transcription (text-only for now; this is the explicit
+      bridge toward a Siri/Watch-style "talk to it" entry point, but that
+      requires a native app — see Phase 3)
 - [ ] Conversational/chat-based commands (e.g. "snooze the promoter task" via
       natural language) — all non-capture actions are still direct UI buttons
 - [ ] Clarifying questions when the model is unsure (it just omits the

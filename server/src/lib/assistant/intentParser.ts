@@ -53,6 +53,21 @@ const CaptureIntentSchema = z.object({
 
 export type CaptureIntent = z.infer<typeof CaptureIntentSchema>;
 
+// "Dump several things at once" support: the model decides whether the
+// input describes one task or several (newlines, "and", commas joining
+// distinct actions, or just back-to-back statements all count), and
+// extracts the same per-field structure for each one in a single call.
+// A plain one-task input still comes back as a single-element array, so
+// this is a strict superset of the single-task schema above -- callers
+// that only ever send one task at a time don't need to think about this.
+const MultiCaptureSchema = z.object({
+  items: z
+    .array(CaptureIntentSchema)
+    .min(1)
+    .max(20)
+    .describe("One entry per distinct task found in the input, in the order they were mentioned."),
+});
+
 export interface ParseCaptureContext {
   /** Reference "today" date (YYYY-MM-DD, in the user's own timezone) so the
    *  model's day-offset is computed relative to the right day. */
@@ -68,6 +83,9 @@ export interface ParseCaptureContext {
 }
 
 const PARSE_TIMEOUT_MS = 6000;
+// Splitting + extracting several items is a heavier call than a single
+// item; give it more room before giving up and falling back.
+const MULTI_PARSE_TIMEOUT_MS = 10000;
 
 let cachedClient: OpenAI | null | undefined;
 
@@ -76,6 +94,18 @@ function getClient(): OpenAI | null {
   const apiKey = process.env.OPENAI_API_KEY;
   cachedClient = apiKey ? new OpenAI({ apiKey }) : null;
   return cachedClient;
+}
+
+function buildSystemPrompt(context: ParseCaptureContext): string {
+  return (
+    "Be conservative: when unsure, prefer null over guessing. Never fabricate a deadline the user didn't imply. " +
+    `Today's reference date is ${context.todayISO} (a ${context.todayWeekday}). ` +
+    "When the text says \"next <weekday>\", treat it as the soonest upcoming occurrence of that weekday " +
+    "strictly after today (if today itself is that weekday, use the one 7 days later, not today). " +
+    `Existing buckets the user can be matched to (choose exactly one of these or null, never invent a new one): ${
+      context.bucketNames.length > 0 ? context.bucketNames.join(", ") : "(none yet)"
+    }.`
+  );
 }
 
 /**
@@ -106,13 +136,7 @@ export async function parseCaptureText(text: string, context: ParseCaptureContex
             role: "system",
             content:
               "You extract structured task metadata from a single line of free-form text a user typed into a quick-capture box. " +
-              "Be conservative: when unsure, prefer null over guessing. Never fabricate a deadline the user didn't imply. " +
-              `Today's reference date is ${context.todayISO} (a ${context.todayWeekday}). ` +
-              "When the text says \"next <weekday>\", treat it as the soonest upcoming occurrence of that weekday " +
-              "strictly after today (if today itself is that weekday, use the one 7 days later, not today). " +
-              `Existing buckets the user can be matched to (choose exactly one of these or null, never invent a new one): ${
-                context.bucketNames.length > 0 ? context.bucketNames.join(", ") : "(none yet)"
-              }.`,
+              buildSystemPrompt(context),
           },
           { role: "user", content: text },
         ],
@@ -137,6 +161,63 @@ export async function parseCaptureText(text: string, context: ParseCaptureContex
   } catch {
     // Network error, timeout, invalid JSON, API error -- always degrade
     // to "no suggestion" rather than let a flaky external API break capture.
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
+ * Like parseCaptureText, but the input may describe one task or several
+ * ("call mom, pay rent, and email John" / a pasted multi-line list / a
+ * stream-of-consciousness dump). Returns an array -- a plain one-task
+ * input still comes back as a single-element array. Returns null (never
+ * throws) under the exact same unavailable/slow/invalid conditions as
+ * parseCaptureText; callers must have a deterministic fallback for that
+ * case (see the quick-capture route's newline-based fallback).
+ */
+export async function parseMultiCaptureText(text: string, context: ParseCaptureContext): Promise<CaptureIntent[] | null> {
+  const client = getClient();
+  if (!client) return null;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), MULTI_PARSE_TIMEOUT_MS);
+
+  try {
+    const completion = await client.chat.completions.create(
+      {
+        model: "gpt-4o-mini",
+        temperature: 0,
+        messages: [
+          {
+            role: "system",
+            content:
+              "A user typed free-form text into a quick-capture box. It may describe ONE task, or SEVERAL distinct " +
+              "tasks (separated by line breaks, numbering, \"and\"/commas joining separate actions, or just stated " +
+              "back-to-back). Split it into one entry per distinct task, preserving the order mentioned, and extract " +
+              "the same structured fields for each one independently -- each task's bucket/importance/date is its " +
+              "own, don't let one task's details leak into another's. If it's really just one task, return a single " +
+              "entry. Cap at 20 entries even if more are implied. " +
+              buildSystemPrompt(context),
+          },
+          { role: "user", content: text },
+        ],
+        response_format: zodResponseFormat(MultiCaptureSchema, "multi_capture_intent"),
+      },
+      { signal: controller.signal }
+    );
+
+    const raw = completion.choices[0]?.message?.content;
+    if (!raw) return null;
+
+    const result = MultiCaptureSchema.safeParse(JSON.parse(raw));
+    if (!result.success || result.data.items.length === 0) return null;
+
+    // Defense in depth, same as the single-task path.
+    return result.data.items.map((item) =>
+      item.bucketName && !context.bucketNames.includes(item.bucketName) ? { ...item, bucketName: null } : item
+    );
+  } catch {
     return null;
   } finally {
     clearTimeout(timeout);

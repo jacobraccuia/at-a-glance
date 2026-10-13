@@ -114,20 +114,42 @@ describe("Phase 1 core flows", () => {
   it("quick-capture creates a task with status captured and no fabricated fields", async () => {
     const res = await agent.post("/api/tasks/quick-capture").send({ text: "drop off the package this week" });
     expect(res.status).toBe(201);
-    expect(res.body.status).toBe("captured");
-    expect(res.body.hardDeadline).toBeNull();
-    expect(res.body.title).toBe("drop off the package this week");
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0].status).toBe("captured");
+    expect(res.body[0].hardDeadline).toBeNull();
+    expect(res.body[0].title).toBe("drop off the package this week");
   });
 
   it("quick-capture with addToToday makes the task show up in the Today view", async () => {
     const res = await agent.post("/api/tasks/quick-capture").send({ text: "water the garden", addToToday: true });
     expect(res.status).toBe(201);
-    expect(res.body.status).toBe("active");
-    expect(res.body.attentionDate).toBeTruthy();
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0].status).toBe("active");
+    expect(res.body[0].attentionDate).toBeTruthy();
 
     const today = await agent.get("/api/tasks?view=today");
-    const found = today.body.tasks.find((t: { id: string }) => t.id === res.body.id);
+    const found = today.body.tasks.find((t: { id: string }) => t.id === res.body[0].id);
     expect(found).toBeTruthy();
+  });
+
+  it("quick-capture with no AI available falls back to one task per non-empty line", async () => {
+    // No mock here -- exercises the real deterministic fallback path used
+    // when OPENAI_API_KEY is unset (as in this test environment).
+    const res = await agent.post("/api/tasks/quick-capture").send({
+      text: "call the vet\n\npay the electric bill\nreturn library books",
+    });
+    expect(res.status).toBe(201);
+    expect(res.body).toHaveLength(3);
+    expect(res.body.map((t: { title: string }) => t.title)).toEqual([
+      "call the vet",
+      "pay the electric bill",
+      "return library books",
+    ]);
+    // No AI involved -- none of these should be fabricated/assisted.
+    for (const task of res.body) {
+      expect(task.origin).toBe("manual");
+      expect(task.status).toBe("captured");
+    }
   });
 
   it("explicitly setting a task's attentionDate to today ('Add to Today') makes it appear there", async () => {
@@ -152,54 +174,117 @@ describe("Phase 1 core flows", () => {
     // deterministic, free, and fast. Confirms the *route's* handling of a
     // suggestion (bucket resolution, date math, origin tagging) is correct,
     // independent of whatever the real model would say.
-    const spy = vi.spyOn(intentParser, "parseCaptureText").mockResolvedValue({
-      cleanTitle: "Drop off the package",
-      bucketName: "Errands",
-      importance: "high",
-      estimateMinutes: 15,
-      waitingOn: null,
-      dateKind: "hard",
-      dateDaysFromNow: 3,
-    });
+    const spy = vi.spyOn(intentParser, "parseMultiCaptureText").mockResolvedValue([
+      {
+        cleanTitle: "Drop off the package",
+        bucketName: "Errands",
+        importance: "high",
+        estimateMinutes: 15,
+        waitingOn: null,
+        dateKind: "hard",
+        dateDaysFromNow: 3,
+      },
+    ]);
 
     try {
       const res = await agent.post("/api/tasks/quick-capture").send({ text: "drop off the package by friday, 15 min" });
       expect(res.status).toBe(201);
-      expect(res.body.title).toBe("Drop off the package");
-      expect(res.body.origin).toBe("assistant");
-      expect(res.body.importance).toBe("high");
-      expect(res.body.estimateMinutes).toBe(15);
-      expect(res.body.bucketId).toBe(bucket.body.id);
-      expect(res.body.status).toBe("active");
-      expect(res.body.hardDeadline).toBeTruthy();
+      expect(res.body).toHaveLength(1);
+      const task = res.body[0];
+      expect(task.title).toBe("Drop off the package");
+      expect(task.origin).toBe("assistant");
+      expect(task.importance).toBe("high");
+      expect(task.estimateMinutes).toBe(15);
+      expect(task.bucketId).toBe(bucket.body.id);
+      expect(task.status).toBe("active");
+      expect(task.hardDeadline).toBeTruthy();
       // Never "explicit" from AI-inferred text, regardless of how clearly worded.
-      expect(res.body.deadlineSource).toBe("inferred");
+      expect(task.deadlineSource).toBe("inferred");
     } finally {
       spy.mockRestore();
     }
   });
 
   it("quick-capture's explicit addToToday always wins over an AI-suggested date", async () => {
-    const spy = vi.spyOn(intentParser, "parseCaptureText").mockResolvedValue({
-      cleanTitle: "Call the dentist",
-      bucketName: null,
-      importance: null,
-      estimateMinutes: null,
-      waitingOn: null,
-      dateKind: "soft",
-      dateDaysFromNow: 10,
-    });
+    const spy = vi.spyOn(intentParser, "parseMultiCaptureText").mockResolvedValue([
+      {
+        cleanTitle: "Call the dentist",
+        bucketName: null,
+        importance: null,
+        estimateMinutes: null,
+        waitingOn: null,
+        dateKind: "soft",
+        dateDaysFromNow: 10,
+      },
+    ]);
 
     try {
       const res = await agent
         .post("/api/tasks/quick-capture")
         .send({ text: "call the dentist sometime", addToToday: true });
       expect(res.status).toBe(201);
-      expect(res.body.status).toBe("active");
+      expect(res.body).toHaveLength(1);
+      expect(res.body[0].status).toBe("active");
       // attentionDate should be "now" (addToToday), not 10 days out.
-      const attentionDate = new Date(res.body.attentionDate);
+      const attentionDate = new Date(res.body[0].attentionDate);
       const daysOut = (attentionDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24);
       expect(Math.abs(daysOut)).toBeLessThan(1);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("quick-capture splits a multi-task dump into separate tasks, each with its own fields", async () => {
+    const spy = vi.spyOn(intentParser, "parseMultiCaptureText").mockResolvedValue([
+      {
+        cleanTitle: "Call mom",
+        bucketName: null,
+        importance: null,
+        estimateMinutes: null,
+        waitingOn: null,
+        dateKind: "none",
+        dateDaysFromNow: null,
+      },
+      {
+        cleanTitle: "Pay rent",
+        bucketName: null,
+        importance: "high",
+        estimateMinutes: null,
+        waitingOn: null,
+        dateKind: "hard",
+        dateDaysFromNow: 2,
+      },
+      {
+        cleanTitle: "Email John about the proposal",
+        bucketName: null,
+        importance: null,
+        estimateMinutes: 20,
+        waitingOn: null,
+        dateKind: "none",
+        dateDaysFromNow: null,
+      },
+    ]);
+
+    try {
+      const res = await agent
+        .post("/api/tasks/quick-capture")
+        .send({ text: "call mom, pay rent by thursday, and email John about the proposal (20 min)" });
+      expect(res.status).toBe(201);
+      expect(res.body).toHaveLength(3);
+      expect(res.body.map((t: { title: string }) => t.title)).toEqual([
+        "Call mom",
+        "Pay rent",
+        "Email John about the proposal",
+      ]);
+      // Each task's own fields stayed its own -- importance/estimate/deadline
+      // didn't leak across items. (importance defaults to "medium" at the
+      // schema level when not explicitly set, same as the single-task path.)
+      expect(res.body[0].importance).toBe("medium");
+      expect(res.body[1].importance).toBe("high");
+      expect(res.body[1].hardDeadline).toBeTruthy();
+      expect(res.body[1].deadlineSource).toBe("inferred");
+      expect(res.body[2].estimateMinutes).toBe(20);
+      expect(res.body[2].hardDeadline).toBeNull();
     } finally {
       spy.mockRestore();
     }

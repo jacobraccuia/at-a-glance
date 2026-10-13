@@ -317,14 +317,21 @@ button:focus-visible {
 
 .quick-capture {
   display: flex;
+  align-items: flex-end;
   gap: 8px;
   margin: 16px 0 24px;
 }
 
-.quick-capture input {
+.quick-capture textarea {
   flex: 1;
-  border-radius: 999px;
+  resize: none;
+  border-radius: 20px;
   padding: 11px 16px;
+  line-height: 1.35;
+  font-family: inherit;
+  /* rows=1 plus JS auto-resize handles growth; overflow kicks in once the
+     textarea hits its JS-enforced max height (see MAX_ROWS). */
+  overflow-y: auto;
 }
 
 .capture-submit {

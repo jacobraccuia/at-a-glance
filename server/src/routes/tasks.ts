@@ -11,7 +11,7 @@ import {
   getWeekdayName,
   startOfDayInTimeZone,
 } from "../lib/timezone.js";
-import { parseCaptureText } from "../lib/assistant/intentParser.js";
+import { parseMultiCaptureText, type CaptureIntent } from "../lib/assistant/intentParser.js";
 
 export const tasksRouter = Router();
 tasksRouter.use(requireAuth);
@@ -160,10 +160,86 @@ tasksRouter.post("/", async (req, res) => {
 // resulting hardDeadline is tagged deadlineSource="inferred" (never
 // "explicit") -- "explicit" is reserved for dates a user set directly via
 // the Details panel, not text the assistant interpreted.
+// Raised from the original 500 (single task) to comfortably fit a
+// multi-task dump (~20 short lines) without inviting someone to paste a
+// whole document in.
 const quickCaptureSchema = z.object({
-  text: z.string().min(1).max(500),
+  text: z.string().min(1).max(4000),
   addToToday: z.boolean().optional(),
 });
+
+// Safety cap on the deterministic (no-AI) newline-split fallback. The AI
+// path is already capped at 20 by MultiCaptureSchema; this keeps the
+// no-API-key path from turning one giant paste into hundreds of tasks.
+const MAX_FALLBACK_LINES = 20;
+
+interface QuickCaptureTaskData {
+  userId: string;
+  title: string;
+  status: "captured" | "active";
+  origin: "manual" | "assistant";
+  attentionDate?: Date;
+  hardDeadline?: Date;
+  deadlineSource?: "inferred";
+  bucketId?: string;
+  importance?: "low" | "medium" | "high";
+  estimateMinutes?: number;
+  estimateConfidence?: "low" | "medium" | "high";
+  waitingOn?: string;
+}
+
+// Builds the create() payload for a single captured item, applying the
+// same business rules regardless of whether it came from a one-task or a
+// multi-task dump: AI dates are always "inferred" (never a fabricated
+// explicit deadline), and an explicit "add to today" always overrides
+// whatever date the AI suggested.
+function buildQuickCaptureData(
+  userId: string,
+  rawText: string,
+  intent: CaptureIntent | null,
+  addToToday: boolean,
+  todayISO: string,
+  tz: string,
+  buckets: { id: string; name: string }[]
+): QuickCaptureTaskData {
+  const data: QuickCaptureTaskData = {
+    userId,
+    title: rawText,
+    status: addToToday ? "active" : "captured",
+    attentionDate: addToToday ? new Date() : undefined,
+    origin: "manual",
+  };
+
+  if (!intent) return data;
+
+  data.origin = "assistant";
+  if (intent.cleanTitle.trim()) data.title = intent.cleanTitle.trim();
+  if (intent.importance) data.importance = intent.importance;
+  if (intent.waitingOn) data.waitingOn = intent.waitingOn;
+  if (intent.estimateMinutes != null && intent.estimateMinutes > 0) {
+    data.estimateMinutes = intent.estimateMinutes;
+    data.estimateConfidence = "medium";
+  }
+  if (intent.bucketName) {
+    const match = buckets.find((b) => b.name.toLowerCase() === intent.bucketName!.toLowerCase());
+    if (match) data.bucketId = match.id;
+  }
+
+  if (!addToToday && intent.dateKind !== "none" && intent.dateDaysFromNow != null) {
+    const resolvedDateStr = addDaysToDateString(todayISO, intent.dateDaysFromNow);
+    const resolvedDate = startOfDayInTimeZone(resolvedDateStr, tz);
+    data.status = "active";
+    if (intent.dateKind === "hard") {
+      data.hardDeadline = resolvedDate;
+      data.deadlineSource = "inferred";
+    } else {
+      data.attentionDate = resolvedDate;
+    }
+  }
+
+  return data;
+}
+
 tasksRouter.post("/quick-capture", async (req, res) => {
   const parsed = quickCaptureSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -173,71 +249,47 @@ tasksRouter.post("/quick-capture", async (req, res) => {
   const text = parsed.data.text.trim();
   const tz = await getUserTimezone(userId);
   const todayISO = getCurrentDateInTimeZone(tz);
+  const todayWeekday = getWeekdayName(todayISO);
 
   const buckets = await prisma.bucket.findMany({ where: { userId, archivedAt: null } });
-  const intent = await parseCaptureText(text, {
-    todayISO,
-    todayWeekday: getWeekdayName(todayISO),
-    bucketNames: buckets.map((b) => b.name),
-  });
+  const bucketNames = buckets.map((b) => b.name);
 
-  const data: {
-    userId: string;
-    title: string;
-    status: "captured" | "active";
-    origin: "manual" | "assistant";
-    attentionDate?: Date;
-    hardDeadline?: Date;
-    deadlineSource?: "inferred";
-    bucketId?: string;
-    importance?: "low" | "medium" | "high";
-    estimateMinutes?: number;
-    estimateConfidence?: "low" | "medium" | "high";
-    waitingOn?: string;
-  } = {
-    userId,
-    title: text,
-    status: parsed.data.addToToday ? "active" : "captured",
-    attentionDate: parsed.data.addToToday ? new Date() : undefined,
-    origin: "manual",
-  };
+  // The model decides whether this is one task or several (and extracts
+  // structured fields for each). If AI assistance is unavailable, fall
+  // back to a purely deterministic split: one task per non-empty line.
+  // A single line with no newlines just becomes one task, identical to
+  // the original Phase 1 behavior -- zero regression for that case.
+  const multiIntent = await parseMultiCaptureText(text, { todayISO, todayWeekday, bucketNames });
 
-  if (intent) {
-    data.origin = "assistant";
-    if (intent.cleanTitle.trim()) data.title = intent.cleanTitle.trim();
-    if (intent.importance) data.importance = intent.importance;
-    if (intent.waitingOn) data.waitingOn = intent.waitingOn;
-    if (intent.estimateMinutes != null && intent.estimateMinutes > 0) {
-      data.estimateMinutes = intent.estimateMinutes;
-      data.estimateConfidence = "medium";
-    }
-    if (intent.bucketName) {
-      const match = buckets.find((b) => b.name.toLowerCase() === intent.bucketName!.toLowerCase());
-      if (match) data.bucketId = match.id;
-    }
-
-    // An explicit "add to today" tap always wins over the AI's rough date.
-    if (!parsed.data.addToToday && intent.dateKind !== "none" && intent.dateDaysFromNow != null) {
-      const resolvedDateStr = addDaysToDateString(todayISO, intent.dateDaysFromNow);
-      const resolvedDate = startOfDayInTimeZone(resolvedDateStr, tz);
-      data.status = "active";
-      if (intent.dateKind === "hard") {
-        data.hardDeadline = resolvedDate;
-        data.deadlineSource = "inferred";
-      } else {
-        data.attentionDate = resolvedDate;
-      }
-    }
+  let rawItems: string[];
+  let intents: (CaptureIntent | null)[];
+  if (multiIntent) {
+    rawItems = multiIntent.map((intent) => intent.cleanTitle.trim() || text);
+    intents = multiIntent;
+  } else {
+    rawItems = text
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .slice(0, MAX_FALLBACK_LINES);
+    if (rawItems.length === 0) rawItems = [text];
+    intents = rawItems.map(() => null);
   }
 
-  const task = await prisma.task.create({ data });
-  await logTaskEvent(prisma, {
-    taskId: task.id,
-    userId,
-    type: "created",
-    payload: { via: "quick-capture", assisted: Boolean(intent) },
-  });
-  res.status(201).json(task);
+  const createdTasks = [];
+  for (let i = 0; i < rawItems.length; i++) {
+    const data = buildQuickCaptureData(userId, rawItems[i], intents[i], Boolean(parsed.data.addToToday), todayISO, tz, buckets);
+    const task = await prisma.task.create({ data });
+    await logTaskEvent(prisma, {
+      taskId: task.id,
+      userId,
+      type: "created",
+      payload: { via: "quick-capture", assisted: Boolean(intents[i]), batchSize: rawItems.length },
+    });
+    createdTasks.push(task);
+  }
+
+  res.status(201).json(createdTasks);
 });
 
 // ---------- List / views ----------
