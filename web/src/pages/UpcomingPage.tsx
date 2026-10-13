@@ -35,10 +35,10 @@ export function UpcomingPage() {
     await api.post(`/tasks/${t.id}/undo`);
     load();
   }
-  async function snoozeTomorrow(t: Task) {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    await api.post(`/tasks/${t.id}/snooze`, { until: tomorrow.toISOString() });
+  async function snoozeByDays(t: Task, days: number) {
+    const until = new Date();
+    until.setDate(until.getDate() + days);
+    await api.post(`/tasks/${t.id}/snooze`, { until: until.toISOString() });
     load();
   }
   async function dropTask(t: Task) {
@@ -64,7 +64,7 @@ export function UpcomingPage() {
             task={t}
             onComplete={() => completeTask(t)}
             onUndo={() => undoTask(t)}
-            onSnoozeTomorrow={() => snoozeTomorrow(t)}
+            onSnooze={(days) => snoozeByDays(t, days)}
             onDrop={() => dropTask(t)}
             onRename={(title) => renameTask(t, title)}
             onAddToToday={() => addToToday(t)}

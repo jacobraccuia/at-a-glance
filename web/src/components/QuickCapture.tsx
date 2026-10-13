@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { api } from "../api/client";
 import { branding } from "../config/branding";
+import { ArrowRightIcon } from "./icons";
 
 export function QuickCapture({ onCaptured, addToToday }: { onCaptured: () => void; addToToday?: boolean }) {
   const [text, setText] = useState("");
@@ -27,8 +28,14 @@ export function QuickCapture({ onCaptured, addToToday }: { onCaptured: () => voi
         placeholder={`Tell ${branding.assistantName}... (e.g. "Drop the package off this week")`}
         disabled={submitting}
       />
-      <button type="submit" disabled={submitting || !text.trim()}>
-        Capture
+      <button
+        type="submit"
+        className="capture-submit"
+        disabled={submitting || !text.trim()}
+        aria-label="Capture task"
+        title="Capture (or press Enter)"
+      >
+        <ArrowRightIcon />
       </button>
     </form>
   );
