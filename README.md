@@ -5,13 +5,13 @@ cognitive overhead. See `CURSOR_MASTER_PROMPT.md` for the full product spec
 and `docs/` for architecture, data model, implementation plan, integrations,
 and privacy documentation.
 
-**Status:** Phase 1 complete. Phase 2 assistant **is** the app — home (`/`)
-is conversational chat (text + in-app mic) that can create, complete,
-cancel, snooze, list, clarify, and surface **Easy Wins** (rules-based
-picks that fit a short time budget). Thin secondary nav for Today /
-Upcoming / All / Buckets. Today still has a text-only quick-add dump.
-See `docs/implementation-plan.md` for built vs. still-deferred Phase 2
-items. Native iOS / Siri / Watch are Phase 3.
+**Status:** Phase 1 complete. Phase 2: talk to your tool via the center
+**Talk** mic — pull-up conversation sheet (pause = end of turn, 30s idle
+close, type fallback, same persisted chat). Home is a quiet glance +
+Easy Wins; lists stay in the tab bar. Today still has a text-only
+quick-add dump. Web browsers may still suspend the mic when backgrounded;
+we restart on return (native Phase 3 is the real always-on path).
+See `docs/implementation-plan.md`.
 
 **Live:** https://server-production-1374.up.railway.app
 

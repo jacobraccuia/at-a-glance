@@ -1,9 +1,8 @@
-// Pragmatic timezone helpers for Phase 1. Uses the standard
-// "format in target zone, diff against UTC interpretation" technique.
-// Known limitation: can be off by up to an hour in the rare case a DST
-// transition happens exactly at local midnight for the zone in question.
-// Acceptable for Phase 1 "today/upcoming" windowing; revisit with a proper
-// tz library (e.g. date-fns-tz / Luxon) if this becomes a real pain point.
+// Pragmatic timezone helpers for Phase 1.
+// Resolve local calendar midnights via Intl formatToParts + iterative
+// correction (the old toLocaleString→Date parse path was wrong whenever
+// the machine's zone ≠ the target zone — UTC "today" ended at 20:00 UTC
+// on an America/New_York host, which broke Tonight views + tests).
 
 export function getCurrentDateInTimeZone(tz: string, now: Date = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(now); // "YYYY-MM-DD"
@@ -51,13 +50,44 @@ export function addDaysToDateString(dateStr: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
+function localPartsInTimeZone(date: Date, tz: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    second: "numeric",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const num = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((p) => p.type === type)?.value ?? NaN);
+  return {
+    year: num("year"),
+    month: num("month"),
+    day: num("day"),
+    hour: num("hour") === 24 ? 0 : num("hour"),
+    minute: num("minute"),
+    second: num("second"),
+  };
+}
+
 /** Start of the given local calendar date (YYYY-MM-DD) in tz, as a UTC Date instant. */
 export function startOfDayInTimeZone(dateStr: string, tz: string): Date {
-  const guessUtc = new Date(`${dateStr}T00:00:00Z`);
-  const asLocalString = guessUtc.toLocaleString("en-US", { timeZone: tz });
-  const reinterpreted = new Date(asLocalString);
-  const offsetMs = guessUtc.getTime() - reinterpreted.getTime();
-  return new Date(guessUtc.getTime() + offsetMs);
+  const [y, m, d] = dateStr.split("-").map(Number);
+  // Desired wall-clock reading in the target zone.
+  const desiredAsUtcMs = Date.UTC(y, m - 1, d, 0, 0, 0, 0);
+  // First guess: that same Y-M-D as if it were UTC.
+  let guess = desiredAsUtcMs;
+  for (let i = 0; i < 4; i++) {
+    const local = localPartsInTimeZone(new Date(guess), tz);
+    const localAsUtcMs = Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute, local.second);
+    const delta = localAsUtcMs - desiredAsUtcMs;
+    if (delta === 0) break;
+    guess -= delta;
+  }
+  return new Date(guess);
 }
 
 /** End of the given local calendar date (inclusive, i.e. 23:59:59.999 local) in tz, as UTC Date. */

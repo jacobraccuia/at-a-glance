@@ -131,9 +131,11 @@ fallback when no API key is configured or the call fails/times out):
 - [x] One-tap undo for complete / drop / snooze / reopen via
       `POST /api/assistant/undo`.
 - [x] Clarifying questions when the model (or resolver) is unsure.
-- [x] Chat UI is **home** (`/`) — the assistant IS the app. Thin secondary
-      nav for Today / Upcoming / All / Buckets. `/assistant` redirects to `/`.
-- [x] Mic lives on the **home** composer (Web Speech API), not on
+- [x] Conversation UI is a **pull-up Talk sheet** (center mic in bottom nav /
+      desktop Talk). Overlays current screen; does not navigate away.
+      Pause ends a turn; 30s idle closes; type fallback; same persisted
+      conversation. Home (`/`) is a quiet glance + Easy Wins.
+- [x] Mic lives on the Talk sheet (Web Speech conversation loop), not on
       Today quick-add. Quick-add remains a text-only fast dump.
 - [x] Easy Wins: rules-based ranker (`easyWins.ts`) + `GET /api/assistant/easy-wins`
       + `easy_wins` assistant action. Home strip + chat replies surface

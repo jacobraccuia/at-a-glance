@@ -7,6 +7,7 @@ import { AllTasksPage } from "./pages/AllTasksPage";
 import { BucketsPage } from "./pages/BucketsPage";
 import { HomePage } from "./pages/HomePage";
 import { Layout } from "./components/Layout";
+import { VoiceSessionProvider } from "./voice/VoiceSessionContext";
 
 function RequireAuth({ children }: { children: React.ReactElement }) {
   const { user, loading } = useAuth();
@@ -22,11 +23,13 @@ function RouterContent() {
       <Route
         element={
           <RequireAuth>
-            <Layout />
+            <VoiceSessionProvider>
+              <Layout />
+            </VoiceSessionProvider>
           </RequireAuth>
         }
       >
-        {/* The app IS the assistant. Lists are secondary views. */}
+        {/* Home = glance. Talk sheet (center mic) = conversation. */}
         <Route path="/" element={<HomePage />} />
         <Route path="/assistant" element={<Navigate to="/" replace />} />
         <Route path="/today" element={<TodayPage />} />
