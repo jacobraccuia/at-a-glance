@@ -402,6 +402,11 @@ button:focus-visible {
   cursor: pointer;
 }
 
+.voice-sheet.dragging {
+  animation: none;
+  transition: none;
+}
+
 .voice-sheet {
   position: relative;
   z-index: 1;
@@ -431,6 +436,8 @@ button:focus-visible {
   padding: 10px 16px 8px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  touch-action: none;
+  cursor: grab;
 }
 
 .voice-sheet-grab {
@@ -633,8 +640,8 @@ button:focus-visible {
 /* ---------- Page content ---------- */
 
 .page h1 {
-  margin-bottom: 4px;
-  font-size: 1.4rem;
+  margin-bottom: 2px;
+  font-size: 1.25rem;
 }
 
 .orientation {
@@ -653,7 +660,7 @@ button:focus-visible {
   flex-wrap: wrap;
   align-items: flex-end;
   gap: 8px;
-  margin: 16px 0 24px;
+  margin: 4px 0 10px;
 }
 
 .quick-capture textarea {
@@ -951,7 +958,7 @@ button:focus-visible {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
-  margin: 8px 0 14px;
+  margin: 2px 0 8px;
 }
 
 .view-chip {
@@ -1274,7 +1281,7 @@ button:focus-visible {
 }
 
 .filters {
-  margin-bottom: 16px;
+  margin-bottom: 8px;
 }
 
 .inline-create-form input {

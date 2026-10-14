@@ -71,8 +71,10 @@ const AssistantActionSchema = z.discriminatedUnion("type", [
 ]);
 
 const AssistantPlanSchema = z.object({
-  // Short, natural reply shown in the chat bubble. Speaks as the assistant.
+  // Written record shown in the chat bubble. May include a short bullet list.
   reply: z.string().min(1).max(1000),
+  // What you say out loud. One or two sentences, like a person — no bullets.
+  spoken: z.string().min(1).max(280),
   // Zero or more actions to attempt, in order. Usually one; multi-intent
   // messages (create three things AND snooze another) can produce several.
   actions: z.array(AssistantActionSchema).max(10),
@@ -183,6 +185,11 @@ export async function parseConversationMessage(
     "- You may return multiple actions for multi-intent messages (e.g. create two tasks and snooze another).",
     "- Never invent a task id. Never claim you did something you didn't put in actions.",
     "- If you create/complete/drop, your reply must state what you did — not ask permission for it.",
+    "- spoken is the line you SAY. One or two short sentences, conversational, no bullets,",
+    "  no reading a list aloud. Example: \"Added Call Gastro — it's on today.\"",
+    "- reply is the written record. It can add a short bullet of what changed.",
+    "  spoken and reply must match: if you only ask a question, spoken is that question.",
+    "- New tasks with no date clues are placed on Today. Say that out loud when you add one.",
   ].join("\n");
 
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
@@ -227,7 +234,7 @@ export async function parseConversationMessage(
       };
     });
 
-    return { reply: result.data.reply, actions };
+    return { reply: result.data.reply, spoken: result.data.spoken, actions };
   } catch {
     return null;
   } finally {

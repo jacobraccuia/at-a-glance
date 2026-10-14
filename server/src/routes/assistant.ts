@@ -146,6 +146,7 @@ assistantRouter.post("/message", async (req, res) => {
   res.status(201).json({
     conversationId: conversation.id,
     message: assistantMsg,
+    spoken: result.spoken,
     executed: result.executed,
   });
 });

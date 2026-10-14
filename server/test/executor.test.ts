@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveTaskQuery, sanitizeAssistantPlan } from "../src/lib/assistant/executor.js";
+import { resolveTaskQuery, sanitizeAssistantPlan, toSpokenLine } from "../src/lib/assistant/executor.js";
 import type { Task } from "@prisma/client";
 
 function fakeTask(title: string, overrides: Partial<Task> = {}): Task {
@@ -64,6 +64,7 @@ describe("sanitizeAssistantPlan", () => {
   it("drops mutations when a clarify is also present", () => {
     const plan = sanitizeAssistantPlan({
       reply: "Want me to add it?",
+      spoken: "Want me to add it?",
       actions: [
         { type: "clarify", question: "Create a new task for Call Gastro?" },
         {
@@ -89,6 +90,7 @@ describe("sanitizeAssistantPlan", () => {
   it("rewrites permission-seeking reply when create already ran", () => {
     const plan = sanitizeAssistantPlan({
       reply: "I couldn't find that. Would you like me to create a new task for that?",
+      spoken: "Want me to add that?",
       actions: [
         {
           type: "create_tasks",
@@ -108,5 +110,20 @@ describe("sanitizeAssistantPlan", () => {
     });
     expect(plan.actions).toHaveLength(1);
     expect(plan.reply).toBe('Got it — added "Call Gastro".');
+    expect(plan.spoken).toBe("Added Call Gastro. It's on today.");
+  });
+});
+
+describe("toSpokenLine", () => {
+  it("speaks the short line and skips the bullet record", () => {
+    expect(toSpokenLine('Got it.\n\n• Added "Call Gastro" to Today', "Added Call Gastro. It's on today.")).toBe(
+      "Added Call Gastro. It's on today.",
+    );
+  });
+
+  it("falls back to the first non-bullet sentence", () => {
+    expect(toSpokenLine('Got it — added "Call Gastro".\n\n• Added "Call Gastro" to Today', "  ")).toBe(
+      'Got it — added "Call Gastro".',
+    );
   });
 });

@@ -24,7 +24,7 @@ export function QuickCapture({ onCaptured, addToToday }: { onCaptured: () => voi
     if (!trimmed) return;
     setSubmitting(true);
     try {
-      await api.post("/tasks/quick-capture", { text: trimmed, addToToday: addToToday ?? false });
+      await api.post("/tasks/quick-capture", { text: trimmed, addToToday: addToToday !== false });
       setText("");
       if (textareaRef.current) textareaRef.current.style.height = "auto";
       onCaptured();
@@ -56,7 +56,7 @@ export function QuickCapture({ onCaptured, addToToday }: { onCaptured: () => voi
           autoResize(e.target);
         }}
         onKeyDown={onKeyDown}
-        placeholder="Quick add..."
+        placeholder="Add to Today..."
         disabled={submitting}
         aria-label="Quick add"
       />

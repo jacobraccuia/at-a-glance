@@ -23,7 +23,24 @@ export interface ExecutedAction {
 
 export interface ExecutionResult {
   reply: string;
+  /** Short line for TTS. Not the bullet record. */
+  spoken: string;
   executed: ExecutedAction[];
+}
+
+/** Line to speak. Prefer the model's spoken field; never read bullets aloud. */
+export function toSpokenLine(written: string, spoken?: string | null): string {
+  const clean = (spoken ?? "")
+    .replace(/^•\s*/gm, "")
+    .replace(/\n+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (clean && !clean.includes("•") && clean.length <= 240) return clean;
+  const first = written
+    .split("\n")
+    .map((l) => l.replace(/^•\s*/, "").trim())
+    .find((l) => l.length > 0);
+  return (first ?? written).replace(/\s+/g, " ").trim().slice(0, 180);
 }
 
 interface ExecContext {
@@ -142,8 +159,10 @@ export function sanitizeAssistantPlan(plan: AssistantPlan): AssistantPlan {
 
   if (hasClarify && hasMutation) {
     // Prefer the question — don't mutate until they answer.
+    const question = plan.actions.find((a) => a.type === "clarify")!.question;
     return {
-      reply: plan.actions.find((a) => a.type === "clarify")!.question,
+      reply: question,
+      spoken: question,
       actions: plan.actions.filter((a) => a.type === "clarify"),
     };
   }
@@ -153,9 +172,10 @@ export function sanitizeAssistantPlan(plan: AssistantPlan): AssistantPlan {
     const creates = plan.actions.filter((a) => a.type === "create_tasks");
     if (creates.length === 1 && creates[0].type === "create_tasks" && creates[0].items.length === 1) {
       const title = creates[0].items[0].cleanTitle;
-      return { ...plan, reply: `Got it — added "${title}".` };
+      const line = `Added ${title}. It's on today.`;
+      return { ...plan, reply: `Got it — added "${title}".`, spoken: line };
     }
-    return { ...plan, reply: "Got it." };
+    return { ...plan, reply: "Got it.", spoken: "Got it." };
   }
 
   return plan;
@@ -222,10 +242,11 @@ async function runAction(action: AssistantAction, ctx: ExecContext, openTasks: T
           type: "created",
           payload: { via: "assistant" },
         });
+        const onToday = Boolean((data as { attentionDate?: Date }).attentionDate);
         results.push({
           type: "create_tasks",
           ok: true,
-          summary: `Added "${task.title}"`,
+          summary: onToday ? `Added "${task.title}" to Today` : `Added "${task.title}"`,
           taskId: task.id,
           taskTitle: task.title,
         });
@@ -377,13 +398,15 @@ export async function executeAssistantPlan(plan: AssistantPlan, ctx: ExecContext
   // Prefer an explicit clarify question as the visible reply.
   const clarify = executed.find((e) => e.type === "clarify" && e.ok);
   if (clarify) {
-    return { reply: clarify.summary, executed };
+    const reply = clarify.summary;
+    return { reply, spoken: toSpokenLine(reply, sanitized.spoken), executed };
   }
 
   // If every action failed resolution, surface that clearly.
   const failures = executed.filter((e) => !e.ok);
   if (failures.length > 0 && failures.length === executed.length) {
-    return { reply: failures.map((f) => f.summary).join(" "), executed };
+    const reply = failures.map((f) => f.summary).join(" ");
+    return { reply, spoken: toSpokenLine(reply, sanitized.spoken), executed };
   }
 
   // Otherwise keep the model's reply, but append concrete change summaries
@@ -405,7 +428,7 @@ export async function executeAssistantPlan(plan: AssistantPlan, ctx: ExecContext
     reply = `${sanitized.reply}\n\n${wins.summary}`;
   }
 
-  return { reply, executed };
+  return { reply, spoken: toSpokenLine(reply, sanitized.spoken), executed };
 }
 
 /**
@@ -426,12 +449,13 @@ export function fallbackPlanFromText(text: string): AssistantPlan {
     const minutes = minutesMatch ? parseInt(minutesMatch[1], 10) : null;
     return {
       reply: "Here are some easy wins.",
+      spoken: "Here are a few easy wins.",
       actions: [{ type: "easy_wins", minutes }],
     };
   }
 
   if (/\bwhat('s| is) on today\b/.test(lower) || /\btoday'?s (list|tasks?)\b/.test(lower)) {
-    return { reply: "Here's today.", actions: [{ type: "list", scope: "today" }] };
+    return { reply: "Here's today.", spoken: "Here's what's on today.", actions: [{ type: "list", scope: "today" }] };
   }
 
   const lines = text
@@ -448,8 +472,12 @@ export function fallbackPlanFromText(text: string): AssistantPlan {
     dateKind: "none" as const,
     dateDaysFromNow: null,
   }));
+  const reply =
+    items.length === 1 ? `Got it — added "${items[0].cleanTitle}".` : `Got it — added ${items.length} things.`;
+  const spoken = items.length === 1 ? `Added ${items[0].cleanTitle}. It's on today.` : `Added ${items.length} things to today.`;
   return {
-    reply: items.length === 1 ? `Got it — added "${items[0].cleanTitle}".` : `Got it — added ${items.length} things.`,
+    reply,
+    spoken,
     actions: [{ type: "create_tasks", items }],
   };
 }

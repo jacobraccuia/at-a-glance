@@ -189,11 +189,9 @@ interface QuickCaptureTaskData {
   waitingOn?: string;
 }
 
-// Builds the create() payload for a single captured item, applying the
-// same business rules regardless of whether it came from a one-task or a
-// multi-task dump: AI dates are always "inferred" (never a fabricated
-// explicit deadline), and an explicit "add to today" always overrides
-// whatever date the AI suggested.
+// Builds the create() payload for a single captured item. AI dates are
+// always "inferred". No date clue → Today when addToToday is on. A named
+// day or deadline wins over that default.
 function buildQuickCaptureData(
   userId: string,
   rawText: string,
@@ -206,28 +204,28 @@ function buildQuickCaptureData(
   const data: QuickCaptureTaskData = {
     userId,
     title: rawText,
-    status: addToToday ? "active" : "captured",
-    attentionDate: addToToday ? new Date() : undefined,
+    status: "captured",
     origin: "manual",
   };
 
-  if (!intent) return data;
-
-  data.origin = "assistant";
-  if (intent.cleanTitle.trim()) data.title = intent.cleanTitle.trim();
-  if (intent.importance) data.importance = intent.importance;
-  if (intent.waitingOn) data.waitingOn = intent.waitingOn;
-  if (intent.estimateMinutes != null && intent.estimateMinutes > 0) {
-    data.estimateMinutes = intent.estimateMinutes;
-    data.estimateConfidence = "medium";
+  if (intent) {
+    data.origin = "assistant";
+    if (intent.cleanTitle.trim()) data.title = intent.cleanTitle.trim();
+    if (intent.importance) data.importance = intent.importance;
+    if (intent.waitingOn) data.waitingOn = intent.waitingOn;
+    if (intent.estimateMinutes != null && intent.estimateMinutes > 0) {
+      data.estimateMinutes = intent.estimateMinutes;
+      data.estimateConfidence = "medium";
+    }
+    if (intent.bucketName) {
+      const match = buckets.find((b) => b.name.toLowerCase() === intent.bucketName!.toLowerCase());
+      if (match) data.bucketId = match.id;
+    }
   }
-  if (intent.bucketName) {
-    const match = buckets.find((b) => b.name.toLowerCase() === intent.bucketName!.toLowerCase());
-    if (match) data.bucketId = match.id;
-  }
 
-  if (!addToToday && intent.dateKind !== "none" && intent.dateDaysFromNow != null) {
-    const resolvedDateStr = addDaysToDateString(todayISO, intent.dateDaysFromNow);
+  const hasDate = intent != null && intent.dateKind !== "none" && intent.dateDaysFromNow != null;
+  if (hasDate && intent) {
+    const resolvedDateStr = addDaysToDateString(todayISO, intent.dateDaysFromNow!);
     const resolvedDate = startOfDayInTimeZone(resolvedDateStr, tz);
     data.status = "active";
     if (intent.dateKind === "hard") {
@@ -236,6 +234,9 @@ function buildQuickCaptureData(
     } else {
       data.attentionDate = resolvedDate;
     }
+  } else if (addToToday) {
+    data.status = "active";
+    data.attentionDate = new Date();
   }
 
   return data;
@@ -284,7 +285,9 @@ tasksRouter.post("/quick-capture", async (req, res) => {
 
   const createdTasks = [];
   for (let i = 0; i < rawItems.length; i++) {
-    const data = buildQuickCaptureData(userId, rawItems[i], intents[i], Boolean(parsed.data.addToToday), todayISO, tz, buckets);
+    // Default on: a bare capture lands on Today unless the caller passes false.
+    const addToToday = parsed.data.addToToday !== false;
+    const data = buildQuickCaptureData(userId, rawItems[i], intents[i], addToToday, todayISO, tz, buckets);
     const task = await prisma.task.create({ data });
     await logTaskEvent(prisma, {
       taskId: task.id,

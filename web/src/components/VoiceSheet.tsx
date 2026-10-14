@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type PointerEvent } from "react";
 import { api } from "../api/client";
 import { branding } from "../config/branding";
 import { useAssistantTts } from "../hooks/useAssistantTts";
@@ -57,6 +57,10 @@ export function VoiceSheet() {
   const [lastActivity, setLastActivity] = useState(Date.now());
   const scrollerRef = useRef<HTMLDivElement>(null);
   const sendingRef = useRef(false);
+  const dragStartY = useRef<number | null>(null);
+  const dragYRef = useRef(0);
+  const [dragY, setDragY] = useState(0);
+  const [draggingSheet, setDraggingSheet] = useState(false);
 
   const bumpActivity = useCallback(() => setLastActivity(Date.now()), []);
   const { speaking: ttsSpeaking, speak: ttsSpeak, stop: ttsStop } = useAssistantTts(open);
@@ -87,6 +91,7 @@ export function VoiceSheet() {
         const res = await api.post<{
           conversationId: string;
           message: { id: string; content: string };
+          spoken?: string;
           executed: ExecutedAction[];
         }>("/assistant/message", { text: trimmed, conversationId: conversationId ?? undefined });
         setConversationId(res.conversationId);
@@ -100,7 +105,7 @@ export function VoiceSheet() {
             actions: res.executed,
           },
         ]);
-        replyText = res.message.content;
+        replyText = res.spoken?.trim() || res.message.content;
         bumpActivity();
       } catch (e) {
         setMessages((prev) => prev.filter((m) => m.id !== tempId));
@@ -212,6 +217,30 @@ export function VoiceSheet() {
     }
   }
 
+  function onSheetPointerDown(e: PointerEvent<HTMLElement>) {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    dragStartY.current = e.clientY;
+    dragYRef.current = 0;
+    setDraggingSheet(true);
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+
+  function onSheetPointerMove(e: PointerEvent<HTMLElement>) {
+    if (dragStartY.current == null) return;
+    const dy = Math.max(0, e.clientY - dragStartY.current);
+    dragYRef.current = dy;
+    setDragY(dy);
+  }
+
+  function onSheetPointerUp() {
+    const shouldClose = dragYRef.current > 90;
+    dragStartY.current = null;
+    dragYRef.current = 0;
+    setDraggingSheet(false);
+    setDragY(0);
+    if (shouldClose) closeSession();
+  }
+
   function onDoneTalking() {
     bumpActivity();
     if (ttsSpeaking) {
@@ -254,8 +283,17 @@ export function VoiceSheet() {
   return (
     <div className="voice-sheet-root" role="dialog" aria-modal="true" aria-label={`Talk to ${branding.assistantName}`}>
       <button type="button" className="voice-sheet-backdrop" aria-label="Close conversation" onClick={closeSession} />
-      <div className="voice-sheet">
-        <header className="voice-sheet-header">
+      <div
+        className={`voice-sheet${draggingSheet ? " dragging" : ""}`}
+        style={{ transform: dragY ? `translateY(${dragY}px)` : undefined }}
+      >
+        <header
+          className="voice-sheet-header"
+          onPointerDown={onSheetPointerDown}
+          onPointerMove={onSheetPointerMove}
+          onPointerUp={onSheetPointerUp}
+          onPointerCancel={onSheetPointerUp}
+        >
           <div className="voice-sheet-grab" aria-hidden />
           <div className="voice-sheet-title-row">
             <div>
@@ -323,15 +361,17 @@ export function VoiceSheet() {
           <div className={`voice-orb compact ${orbClass}`.trim()} aria-hidden>
             <MicIcon />
           </div>
-          <button
-            type="button"
-            className="voice-done-btn"
-            onClick={onDoneTalking}
-            disabled={!ttsSpeaking && (sending || !hasSpeech)}
-            aria-label={ttsSpeaking ? "Stop speaking" : "Done talking"}
-          >
-            {ttsSpeaking ? "Stop" : "Done talking"}
-          </button>
+          {(ttsSpeaking || hasSpeech) && (
+            <button
+              type="button"
+              className="voice-done-btn"
+              onClick={onDoneTalking}
+              disabled={sending && !ttsSpeaking}
+              aria-label={ttsSpeaking ? "Stop speaking" : "Send now"}
+            >
+              {ttsSpeaking ? "Stop" : "Send now"}
+            </button>
+          )}
         </div>
 
         <form className="voice-sheet-composer" onSubmit={onSubmit} onFocus={bumpActivity}>

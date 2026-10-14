@@ -1,11 +1,9 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
-import type { Bucket, Stats, Task, TaskOccurrence, TaskStatus, TodayViewResponse } from "../api/types";
+import type { Bucket, Task, TaskOccurrence, TaskStatus, TodayViewResponse } from "../api/types";
 import { TaskRow } from "./TaskRow";
 import { OccurrenceRow } from "./OccurrenceRow";
 import { QuickCapture } from "./QuickCapture";
-import { TaskDetailsFields, emptyTaskDetails, type TaskDetailsValue } from "./TaskDetailsFields";
-import { RecurrenceFields, emptyRecurrence, type RecurrenceValue } from "./RecurrenceFields";
 
 export type BoardView = "today" | "upcoming" | "later" | "all";
 
@@ -29,14 +27,9 @@ export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [occurrences, setOccurrences] = useState<TaskOccurrence[]>([]);
   const [buckets, setBuckets] = useState<Bucket[]>([]);
-  const [stats, setStats] = useState<Stats | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "">("");
   const [bucketFilter, setBucketFilter] = useState("");
-  const [newTitle, setNewTitle] = useState("");
-  const [showMoreDetails, setShowMoreDetails] = useState(false);
-  const [newDetails, setNewDetails] = useState<TaskDetailsValue>(emptyTaskDetails);
-  const [newRecurrence, setNewRecurrence] = useState<RecurrenceValue>(emptyRecurrence);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -56,10 +49,8 @@ export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
         ? api.get<TodayViewResponse>(`/tasks?${params.toString()}`)
         : api.get<Task[]>(`/tasks?${params.toString()}`);
 
-    const extras = view === "today" ? [api.get<Stats>("/stats")] : [];
-
-    Promise.all([tasksReq, ...extras])
-      .then(([body, maybeStats]) => {
+    tasksReq
+      .then((body) => {
         if (view === "today" || view === "upcoming") {
           const tv = body as TodayViewResponse;
           setTasks(tv.tasks);
@@ -68,7 +59,6 @@ export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
           setTasks(body as Task[]);
           setOccurrences([]);
         }
-        setStats((maybeStats as Stats | undefined) ?? null);
         setError(null);
       })
       .catch((e) => setError(e.message))
@@ -79,45 +69,6 @@ export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
   useEffect(() => {
     api.get<Bucket[]>("/buckets").then(setBuckets).catch(() => undefined);
   }, []);
-
-  async function createTask(e: FormEvent) {
-    e.preventDefault();
-    if (!newTitle.trim()) return;
-    try {
-      setError(null);
-      await api.post("/tasks", {
-        title: newTitle.trim(),
-        status: "active",
-        bucketId: newDetails.bucketId || undefined,
-        importance: newDetails.importance,
-        hardDeadline: newDetails.deadline ? new Date(newDetails.deadline).toISOString() : undefined,
-        deadlineSource: newDetails.deadline ? "explicit" : undefined,
-        estimateMinutes: newDetails.estimateMinutes ? parseInt(newDetails.estimateMinutes, 10) : undefined,
-        waitingOn: newDetails.waitingOn || undefined,
-        notes: newDetails.notes || undefined,
-        attentionDate: view === "today" ? new Date().toISOString() : undefined,
-        recurrence: newRecurrence.enabled
-          ? {
-              frequency: newRecurrence.frequency,
-              interval: newRecurrence.interval ? parseInt(newRecurrence.interval, 10) : 1,
-              byWeekday: newRecurrence.frequency === "weekly" ? newRecurrence.byWeekday : undefined,
-              byMonthday:
-                newRecurrence.frequency === "monthly" && newRecurrence.byMonthday
-                  ? parseInt(newRecurrence.byMonthday, 10)
-                  : undefined,
-              startDate: new Date().toISOString().slice(0, 10),
-            }
-          : undefined,
-      });
-      setNewTitle("");
-      setNewDetails(emptyTaskDetails);
-      setNewRecurrence(emptyRecurrence);
-      setShowMoreDetails(false);
-      load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create task");
-    }
-  }
 
   async function completeTask(t: Task) {
     await api.post(`/tasks/${t.id}/complete`);
@@ -158,19 +109,6 @@ export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
   return (
     <div className="page task-board">
       <h1>{heading}</h1>
-      {view === "today" && (
-        <p className="orientation">
-          {pending.length + pendingOccurrences.filter((o) => o.status === "pending").length === 0
-            ? "Nothing urgent today. Breathing room."
-            : `${pending.length + pendingOccurrences.filter((o) => o.status === "pending").length} to look at today.`}
-        </p>
-      )}
-      {view === "today" && stats && (
-        <p className="progress-summary muted">
-          {stats.completedThisWeek} completed this week · {stats.activeBacklog} active in Later
-        </p>
-      )}
-
       <div className="view-filters" role="tablist" aria-label="Task view">
         {VIEW_OPTIONS.map((opt) => (
           <button
@@ -186,23 +124,7 @@ export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
         ))}
       </div>
 
-      {view === "today" && <QuickCapture onCaptured={load} addToToday />}
-
-      <form onSubmit={createTask} className="inline-create-form-wrapper">
-        <div className="inline-create-form">
-          <input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="New task title" />
-          <button type="submit">{view === "today" ? "Add to Today" : "Add"}</button>
-        </div>
-        <button type="button" className="details-toggle" onClick={() => setShowMoreDetails((s) => !s)}>
-          {showMoreDetails ? "− Hide details" : "+ Details"}
-        </button>
-        {showMoreDetails && (
-          <div className="create-details-panel">
-            <TaskDetailsFields value={newDetails} onChange={setNewDetails} buckets={buckets} />
-            <RecurrenceFields value={newRecurrence} onChange={setNewRecurrence} />
-          </div>
-        )}
-      </form>
+      <QuickCapture onCaptured={load} addToToday />
 
       <div className="filters">
         <input placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} />

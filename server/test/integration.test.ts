@@ -116,7 +116,8 @@ describe("Phase 1 core flows", () => {
     const res = await agent.post("/api/tasks/quick-capture").send({ text: "drop off the package this week" });
     expect(res.status).toBe(201);
     expect(res.body).toHaveLength(1);
-    expect(res.body[0].status).toBe("captured");
+    expect(res.body[0].status).toBe("active");
+    expect(res.body[0].attentionDate).toBeTruthy();
     expect(res.body[0].hardDeadline).toBeNull();
     expect(res.body[0].title).toBe("drop off the package this week");
   });
@@ -149,7 +150,8 @@ describe("Phase 1 core flows", () => {
     // No AI involved -- none of these should be fabricated/assisted.
     for (const task of res.body) {
       expect(task.origin).toBe("manual");
-      expect(task.status).toBe("captured");
+      expect(task.status).toBe("active");
+      expect(task.attentionDate).toBeTruthy();
     }
   });
 
@@ -206,7 +208,7 @@ describe("Phase 1 core flows", () => {
     }
   });
 
-  it("quick-capture's explicit addToToday always wins over an AI-suggested date", async () => {
+  it("a named day wins over the Today default", async () => {
     const spy = vi.spyOn(intentParser, "parseMultiCaptureText").mockResolvedValue([
       {
         cleanTitle: "Call the dentist",
@@ -226,10 +228,10 @@ describe("Phase 1 core flows", () => {
       expect(res.status).toBe(201);
       expect(res.body).toHaveLength(1);
       expect(res.body[0].status).toBe("active");
-      // attentionDate should be "now" (addToToday), not 10 days out.
       const attentionDate = new Date(res.body[0].attentionDate);
       const daysOut = (attentionDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24);
-      expect(Math.abs(daysOut)).toBeLessThan(1);
+      expect(daysOut).toBeGreaterThan(8);
+      expect(daysOut).toBeLessThan(12);
     } finally {
       spy.mockRestore();
     }
