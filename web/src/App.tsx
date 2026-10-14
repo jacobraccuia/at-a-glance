@@ -4,8 +4,8 @@ import { LoginPage } from "./pages/LoginPage";
 import { TodayPage } from "./pages/TodayPage";
 import { UpcomingPage } from "./pages/UpcomingPage";
 import { AllTasksPage } from "./pages/AllTasksPage";
-import { BucketsPage } from "./pages/BucketsPage";
 import { HomePage } from "./pages/HomePage";
+import { SettingsPage } from "./pages/SettingsPage";
 import { Layout } from "./components/Layout";
 import { VoiceSessionProvider } from "./voice/VoiceSessionContext";
 
@@ -35,7 +35,8 @@ function RouterContent() {
         <Route path="/today" element={<TodayPage />} />
         <Route path="/upcoming" element={<UpcomingPage />} />
         <Route path="/all" element={<AllTasksPage />} />
-        <Route path="/buckets" element={<BucketsPage />} />
+        <Route path="/buckets" element={<Navigate to="/settings" replace />} />
+        <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

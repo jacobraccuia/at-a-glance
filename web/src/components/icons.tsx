@@ -43,6 +43,14 @@ export function CheckIcon() {
   );
 }
 
+export function PlusIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
 export function MicIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

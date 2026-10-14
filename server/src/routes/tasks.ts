@@ -365,6 +365,22 @@ tasksRouter.get("/", async (req, res) => {
     return res.json({ tasks: directTasks, occurrences });
   }
 
+  // "later" = captured inbox or active with no attention date (not on Today).
+  if (view === "later") {
+    const tasks = await prisma.task.findMany({
+      where: {
+        ...baseWhere,
+        status: { in: ["captured", "active"] },
+        attentionDate: null,
+        hardDeadline: null,
+        recurrenceRuleId: null,
+      },
+      orderBy: { createdAt: "desc" },
+      include: { bucket: true },
+    });
+    return res.json(tasks);
+  }
+
   // "all"
   const where: Record<string, unknown> = { ...baseWhere };
   if (statusFilter) {
@@ -398,6 +414,7 @@ const updateTaskSchema = z.object({
   bucketId: z.string().uuid().nullable().optional(),
   goalId: z.string().uuid().nullable().optional(),
   attentionDate: z.string().datetime().nullable().optional(),
+  status: z.enum(["captured", "active", "completed", "dropped"]).optional(),
   hardDeadline: z.string().datetime().nullable().optional(),
   deadlineSource: z.enum(["explicit", "inferred"]).nullable().optional(),
   estimateMinutes: z.number().int().min(0).nullable().optional(),

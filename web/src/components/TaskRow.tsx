@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { Bucket, Task } from "../api/types";
 import { TaskEditPanel } from "./TaskEditPanel";
 import { useSwipeRow } from "../hooks/useSwipeRow";
-import { CheckIcon, DetailsIcon, DropIcon, SnoozeIcon } from "./icons";
+import { CheckIcon, DetailsIcon, DropIcon, PlusIcon, SnoozeIcon } from "./icons";
 
 interface Props {
   task: Task;
@@ -14,6 +14,8 @@ interface Props {
   onAddToToday?: () => void;
   buckets?: Bucket[];
   onDetailsSaved?: () => void;
+  /** Open the details panel on first render (home easy-win tap). */
+  startDetailsOpen?: boolean;
 }
 
 function isAttentionDateToday(attentionDate: string | null): boolean {
@@ -37,11 +39,12 @@ export function TaskRow({
   onAddToToday,
   buckets,
   onDetailsSaved,
+  startDetailsOpen = false,
 }: Props) {
   const isDone = task.status === "completed";
   const [editing, setEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState(task.title);
-  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(startDetailsOpen);
 
   // Swipe left to complete, swipe right (near/far) to snooze to a near
   // (tomorrow) or far (3 days) default -- see useSwipeRow for thresholds.
@@ -98,7 +101,15 @@ export function TaskRow({
           {...handlers}
         >
           <div className="task-row-top">
-            <input type="checkbox" checked={isDone} onChange={isDone ? onUndo : onComplete} />
+            <button
+              type="button"
+              className={`done-toggle${isDone ? " is-done" : ""}`}
+              onClick={isDone ? onUndo : onComplete}
+              aria-label={isDone ? "Mark not done" : "Mark done"}
+              title={isDone ? "Undo" : "Done"}
+            >
+              <CheckIcon />
+            </button>
             <div className="task-row-main">
               {editing ? (
                 <input
@@ -134,8 +145,8 @@ export function TaskRow({
             {!isDone && (
               <div className="task-actions">
                 {onAddToToday && !task.recurrenceRuleId && !isAttentionDateToday(task.attentionDate) && (
-                  <button className="icon-button" onClick={onAddToToday} title="Add to Today" aria-label="Add to Today">
-                    <CheckIcon />
+                  <button className="icon-button add-today" onClick={onAddToToday} title="Add to Today" aria-label="Add to Today">
+                    <PlusIcon />
                   </button>
                 )}
                 {buckets && (

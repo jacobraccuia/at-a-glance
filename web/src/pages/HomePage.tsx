@@ -13,8 +13,8 @@ interface EasyWin {
 }
 
 /**
- * Quiet home: glance + easy wins. Conversation lives in the Talk sheet
- * (center mic), so this page is where you land to see tasks, not chat.
+ * Quiet home: glance + easy wins. Tap a win to open its details on All
+ * (not auto-complete). Conversation lives in the Talk sheet.
  */
 export function HomePage() {
   const { openSession } = useVoiceSession();
@@ -39,15 +39,6 @@ export function HomePage() {
     loadEasyWins(25);
   }, [loadEasyWins]);
 
-  async function completeWin(win: EasyWin) {
-    try {
-      await api.post(`/tasks/${win.id}/complete`);
-      loadEasyWins(easyWinsMinutes);
-    } catch {
-      /* ignore — user can retry from Today */
-    }
-  }
-
   return (
     <div className="page home-page">
       <header className="home-hero">
@@ -70,12 +61,12 @@ export function HomePage() {
           <ul className="easy-wins-list">
             {easyWins.map((w) => (
               <li key={w.id}>
-                <button type="button" className="easy-win-chip" onClick={() => completeWin(w)} title="Mark done">
+                <Link className="easy-win-chip" to={`/all?task=${w.id}`} title="Open details">
                   <span className="easy-win-title">{w.title}</span>
                   <span className="easy-win-meta">
                     {w.estimateMinutes != null ? `~${w.estimateMinutes}m` : `~${w.assumedMinutes}m?`}
                   </span>
-                </button>
+                </Link>
               </li>
             ))}
           </ul>
@@ -85,9 +76,9 @@ export function HomePage() {
       <p className="muted small home-links">
         <Link to="/today">Today</Link>
         {" · "}
-        <Link to="/upcoming">Upcoming</Link>
-        {" · "}
         <Link to="/all">All tasks</Link>
+        {" · "}
+        <Link to="/settings">Settings</Link>
       </p>
     </div>
   );

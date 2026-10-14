@@ -43,7 +43,8 @@ export function BucketsPage() {
 
   return (
     <div className="page">
-      <h1>Buckets</h1>
+      <h1>Settings</h1>
+      <h2 className="settings-subhead">Buckets</h2>
       <form onSubmit={createBucket} className="inline-create-form">
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="New bucket name" />
         <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
