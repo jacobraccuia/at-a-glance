@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveTaskQuery } from "../src/lib/assistant/executor.js";
+import { resolveTaskQuery, sanitizeAssistantPlan } from "../src/lib/assistant/executor.js";
 import type { Task } from "@prisma/client";
 
 function fakeTask(title: string, overrides: Partial<Task> = {}): Task {
@@ -57,5 +57,56 @@ describe("resolveTaskQuery", () => {
     // Both titles contain "drop" as a strong token -- force ambiguity.
     const ambiguous = [fakeTask("Drop party invite"), fakeTask("Drop party cleanup")];
     expect(resolveTaskQuery("drop party", ambiguous)).toBeNull();
+  });
+});
+
+describe("sanitizeAssistantPlan", () => {
+  it("drops mutations when a clarify is also present", () => {
+    const plan = sanitizeAssistantPlan({
+      reply: "Want me to add it?",
+      actions: [
+        { type: "clarify", question: "Create a new task for Call Gastro?" },
+        {
+          type: "create_tasks",
+          items: [
+            {
+              cleanTitle: "Call Gastro",
+              bucketName: null,
+              importance: null,
+              estimateMinutes: null,
+              waitingOn: null,
+              dateKind: "none",
+              dateDaysFromNow: null,
+            },
+          ],
+        },
+      ],
+    });
+    expect(plan.actions).toEqual([{ type: "clarify", question: "Create a new task for Call Gastro?" }]);
+    expect(plan.reply).toBe("Create a new task for Call Gastro?");
+  });
+
+  it("rewrites permission-seeking reply when create already ran", () => {
+    const plan = sanitizeAssistantPlan({
+      reply: "I couldn't find that. Would you like me to create a new task for that?",
+      actions: [
+        {
+          type: "create_tasks",
+          items: [
+            {
+              cleanTitle: "Call Gastro",
+              bucketName: null,
+              importance: null,
+              estimateMinutes: null,
+              waitingOn: null,
+              dateKind: "none",
+              dateDaysFromNow: null,
+            },
+          ],
+        },
+      ],
+    });
+    expect(plan.actions).toHaveLength(1);
+    expect(plan.reply).toBe('Got it — added "Call Gastro".');
   });
 });

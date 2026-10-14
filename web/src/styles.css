@@ -552,6 +552,12 @@ button:focus-visible {
   animation: mic-pulse 2.2s ease-in-out infinite;
 }
 
+.voice-orb.speaking {
+  background: var(--accent);
+  color: #fff;
+  animation: mic-pulse 0.9s ease-in-out infinite;
+}
+
 .voice-sheet-controls {
   display: flex;
   align-items: center;

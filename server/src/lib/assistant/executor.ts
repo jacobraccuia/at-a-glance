@@ -86,11 +86,12 @@ async function loadOpenTasks(prisma: PrismaClient, userId: string): Promise<Task
   });
 }
 
-function buildCreateData(
-  ctx: ExecContext,
-  item: CaptureItem,
-  forceToday: boolean
-): Record<string, unknown> {
+function buildCreateData(ctx: ExecContext, item: CaptureItem): Record<string, unknown> {
+  // Inbox / Later pile: soft date with no day offset (user said later/someday).
+  const parkInbox = item.dateKind === "soft" && item.dateDaysFromNow == null;
+  // Default: no date clues → Today when addToTodayDefault is on.
+  const forceToday = ctx.addToTodayDefault && item.dateKind === "none" && !parkInbox;
+
   const data: Record<string, unknown> = {
     userId: ctx.userId,
     title: item.cleanTitle.trim() || "Untitled",
@@ -108,7 +109,7 @@ function buildCreateData(
     const match = ctx.buckets.find((b) => b.name.toLowerCase() === item.bucketName!.toLowerCase());
     if (match) data.bucketId = match.id;
   }
-  if (!forceToday && item.dateKind !== "none" && item.dateDaysFromNow != null) {
+  if (!forceToday && !parkInbox && item.dateKind !== "none" && item.dateDaysFromNow != null) {
     const resolvedDateStr = addDaysToDateString(ctx.todayISO, item.dateDaysFromNow);
     const resolvedDate = startOfDayInTimeZone(resolvedDateStr, ctx.tz);
     data.status = "active";
@@ -120,6 +121,44 @@ function buildCreateData(
     }
   }
   return data;
+}
+
+const MUTATING_TYPES = new Set([
+  "create_tasks",
+  "complete",
+  "drop",
+  "snooze",
+  "reopen",
+  "add_to_today",
+]);
+
+/**
+ * Defense in depth: model sometimes asks in reply while also mutating.
+ * Rule — either ask OR act, never both.
+ */
+export function sanitizeAssistantPlan(plan: AssistantPlan): AssistantPlan {
+  const hasClarify = plan.actions.some((a) => a.type === "clarify");
+  const hasMutation = plan.actions.some((a) => MUTATING_TYPES.has(a.type));
+
+  if (hasClarify && hasMutation) {
+    // Prefer the question — don't mutate until they answer.
+    return {
+      reply: plan.actions.find((a) => a.type === "clarify")!.question,
+      actions: plan.actions.filter((a) => a.type === "clarify"),
+    };
+  }
+
+  if (hasMutation && /would you like|should i (add|create|make)|want me to/i.test(plan.reply)) {
+    // They already chose to act — strip permission-seeking wording.
+    const creates = plan.actions.filter((a) => a.type === "create_tasks");
+    if (creates.length === 1 && creates[0].type === "create_tasks" && creates[0].items.length === 1) {
+      const title = creates[0].items[0].cleanTitle;
+      return { ...plan, reply: `Got it — added "${title}".` };
+    }
+    return { ...plan, reply: "Got it." };
+  }
+
+  return plan;
 }
 
 async function runAction(action: AssistantAction, ctx: ExecContext, openTasks: Task[]): Promise<ExecutedAction[]> {
@@ -175,7 +214,7 @@ async function runAction(action: AssistantAction, ctx: ExecContext, openTasks: T
     case "create_tasks": {
       const results: ExecutedAction[] = [];
       for (const item of action.items) {
-        const data = buildCreateData(ctx, item, ctx.addToTodayDefault);
+        const data = buildCreateData(ctx, item);
         const task = await ctx.prisma.task.create({ data: data as never });
         await logTaskEvent(ctx.prisma, {
           taskId: task.id,
@@ -326,10 +365,11 @@ async function runAction(action: AssistantAction, ctx: ExecContext, openTasks: T
  * clarify action should take precedence over the model's draft reply.
  */
 export async function executeAssistantPlan(plan: AssistantPlan, ctx: ExecContext): Promise<ExecutionResult> {
+  const sanitized = sanitizeAssistantPlan(plan);
   const openTasks = await loadOpenTasks(ctx.prisma, ctx.userId);
   const executed: ExecutedAction[] = [];
 
-  for (const action of plan.actions) {
+  for (const action of sanitized.actions) {
     const results = await runAction(action, ctx, openTasks);
     executed.push(...results);
   }
@@ -349,7 +389,7 @@ export async function executeAssistantPlan(plan: AssistantPlan, ctx: ExecContext
   // Otherwise keep the model's reply, but append concrete change summaries
   // when useful (so the user sees exactly what happened).
   const changeSummaries = executed.filter((e) => e.ok && e.type !== "list" && e.type !== "clarify").map((e) => e.summary);
-  let reply = plan.reply;
+  let reply = sanitized.reply;
   if (changeSummaries.length > 0 && !changeSummaries.some((s) => reply.toLowerCase().includes(s.toLowerCase().slice(0, 12)))) {
     // Light touch: only append if the reply didn't already narrate it.
     reply = `${reply}\n\n${changeSummaries.map((s) => `• ${s}`).join("\n")}`;
@@ -357,12 +397,12 @@ export async function executeAssistantPlan(plan: AssistantPlan, ctx: ExecContext
 
   // List / easy_wins: append the concrete summary so the user sees the picks.
   const list = executed.find((e) => e.type === "list" && e.ok);
-  if (list && plan.actions.length === 1) {
-    reply = `${plan.reply}\n\n${list.summary}`;
+  if (list && sanitized.actions.length === 1) {
+    reply = `${sanitized.reply}\n\n${list.summary}`;
   }
   const wins = executed.find((e) => e.type === "easy_wins" && e.ok);
-  if (wins && plan.actions.every((a) => a.type === "easy_wins" || a.type === "none")) {
-    reply = `${plan.reply}\n\n${wins.summary}`;
+  if (wins && sanitized.actions.every((a) => a.type === "easy_wins" || a.type === "none")) {
+    reply = `${sanitized.reply}\n\n${wins.summary}`;
   }
 
   return { reply, executed };

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { api } from "../api/client";
 import { branding } from "../config/branding";
+import { useAssistantTts } from "../hooks/useAssistantTts";
 import { DEFAULT_SILENCE_MS, useConversationMic } from "../hooks/useConversationMic";
 import { useVoiceSession } from "../voice/VoiceSessionContext";
 import { ArrowRightIcon, MicIcon } from "./icons";
@@ -41,8 +42,8 @@ interface Conversation {
 }
 
 /**
- * Pull-up conversation sheet. Voice-first: longer pause or "Done talking"
- * ends a turn. Mic stays warm while the assistant thinks (mobile-safe).
+ * Pull-up conversation sheet. Voice-first: pause / Done ends a turn;
+ * assistant speaks replies aloud (TTS), mic stays muted until done.
  */
 export function VoiceSheet() {
   const { open, closeSession } = useVoiceSession();
@@ -58,6 +59,7 @@ export function VoiceSheet() {
   const sendingRef = useRef(false);
 
   const bumpActivity = useCallback(() => setLastActivity(Date.now()), []);
+  const { speaking: ttsSpeaking, speak: ttsSpeak, stop: ttsStop } = useAssistantTts(open);
 
   const scrollToBottom = useCallback(() => {
     requestAnimationFrame(() => {
@@ -69,6 +71,7 @@ export function VoiceSheet() {
     async (text: string) => {
       const trimmed = text.trim();
       if (!trimmed || sendingRef.current) return;
+      ttsStop();
       sendingRef.current = true;
       setSending(true);
       setError(null);
@@ -79,6 +82,7 @@ export function VoiceSheet() {
       const tempId = `temp-${Date.now()}`;
       setMessages((prev) => [...prev, { id: tempId, role: "user", content: trimmed }]);
 
+      let replyText: string | null = null;
       try {
         const res = await api.post<{
           conversationId: string;
@@ -96,6 +100,7 @@ export function VoiceSheet() {
             actions: res.executed,
           },
         ]);
+        replyText = res.message.content;
         bumpActivity();
       } catch (e) {
         setMessages((prev) => prev.filter((m) => m.id !== tempId));
@@ -105,14 +110,20 @@ export function VoiceSheet() {
         sendingRef.current = false;
         setSending(false);
       }
+
+      if (replyText) {
+        bumpActivity();
+        await ttsSpeak(replyText);
+        bumpActivity();
+      }
     },
-    [bumpActivity, conversationId],
+    [bumpActivity, conversationId, ttsSpeak, ttsStop],
   );
 
-  // Keep mic warm while thinking — only mute acceptance, don't tear down.
+  // Mute while thinking OR while the assistant is talking back.
   const mic = useConversationMic({
     active: open,
-    muted: sending,
+    muted: sending || ttsSpeaking,
     silenceMs: DEFAULT_SILENCE_MS,
     onUtterance: (text) => {
       void send(text);
@@ -167,10 +178,10 @@ export function VoiceSheet() {
     bumpActivity();
     try {
       await api.post("/assistant/undo", undo);
-      setMessages((prev) => [
-        ...prev,
-        { id: `undo-${Date.now()}`, role: "assistant", content: "Undone.", actions: null },
-      ]);
+      const content = "Undone.";
+      setMessages((prev) => [...prev, { id: `undo-${Date.now()}`, role: "assistant", content, actions: null }]);
+      await ttsSpeak(content);
+      bumpActivity();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Undo failed");
     }
@@ -178,6 +189,7 @@ export function VoiceSheet() {
 
   async function onNewChat() {
     bumpActivity();
+    ttsStop();
     try {
       const c = await api.post<Conversation>("/assistant/conversation/new", {});
       setConversationId(c.id);
@@ -202,16 +214,20 @@ export function VoiceSheet() {
 
   function onDoneTalking() {
     bumpActivity();
-    if (partial.trim()) {
-      mic.flushNow();
+    if (ttsSpeaking) {
+      ttsStop();
+      return;
     }
+    if (partial.trim()) mic.flushNow();
   }
 
   if (!open) return null;
 
   const hasSpeech = Boolean(partial.trim());
-  const orbClass =
-    mic.phase === "hearing"
+  const busy = sending || ttsSpeaking;
+  const orbClass = ttsSpeaking
+    ? "speaking"
+    : mic.phase === "hearing"
       ? "hearing"
       : mic.phase === "muted"
         ? "muted"
@@ -223,15 +239,17 @@ export function VoiceSheet() {
 
   const statusLabel = sending
     ? "Thinking…"
-    : mic.phase === "reconnecting"
-      ? "Reconnecting mic…"
-      : mic.phase === "hearing"
-        ? "Got it — pause or tap Done when finished"
-        : mic.phase === "listening"
-          ? "Listening — take your time"
-          : mic.supported
-            ? "Starting mic…"
-            : "Type your message";
+    : ttsSpeaking
+      ? "Speaking…"
+      : mic.phase === "reconnecting"
+        ? "Reconnecting mic…"
+        : mic.phase === "hearing"
+          ? "Got it — pause or tap Done when finished"
+          : mic.phase === "listening"
+            ? "Listening — take your time"
+            : mic.supported
+              ? "Starting mic…"
+              : "Type your message";
 
   return (
     <div className="voice-sheet-root" role="dialog" aria-modal="true" aria-label={`Talk to ${branding.assistantName}`}>
@@ -262,7 +280,7 @@ export function VoiceSheet() {
               <div className={`voice-orb ${orbClass}`.trim()} aria-hidden>
                 <MicIcon />
               </div>
-              <p>Talk when you're ready. Pause a beat — or tap Done — and I'll reply.</p>
+              <p>Talk when you're ready. I'll listen, then talk back.</p>
             </div>
           )}
           {messages.map((m) => {
@@ -287,7 +305,7 @@ export function VoiceSheet() {
               </div>
             );
           })}
-          {partial && !sending && (
+          {partial && !busy && (
             <div className="assistant-bubble user partial">
               <div className="assistant-bubble-body">{partial}</div>
             </div>
@@ -309,10 +327,10 @@ export function VoiceSheet() {
             type="button"
             className="voice-done-btn"
             onClick={onDoneTalking}
-            disabled={sending || !hasSpeech}
-            aria-label="Done talking"
+            disabled={!ttsSpeaking && (sending || !hasSpeech)}
+            aria-label={ttsSpeaking ? "Stop speaking" : "Done talking"}
           >
-            Done talking
+            {ttsSpeaking ? "Stop" : "Done talking"}
           </button>
         </div>
 

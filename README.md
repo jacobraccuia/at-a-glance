@@ -6,12 +6,12 @@ and `docs/` for architecture, data model, implementation plan, integrations,
 and privacy documentation.
 
 **Status:** Phase 1 complete. Phase 2: talk to your tool via the center
-**Talk** mic — pull-up conversation sheet (pause = end of turn, 30s idle
-close, type fallback, same persisted chat). Home is a quiet glance +
-Easy Wins; lists stay in the tab bar. Today still has a text-only
-quick-add dump. Web browsers may still suspend the mic when backgrounded;
-we restart on return (native Phase 3 is the real always-on path).
-See `docs/implementation-plan.md`.
+**Talk** mic — pull-up conversation sheet (pause / Done = end of turn,
+assistant **speaks back** via OpenAI TTS with browser fallback, 30s idle
+close, type fallback, same persisted chat). New tasks default to Today.
+Home is a quiet glance + Easy Wins. Guest login for phone testing.
+Web browsers may still suspend the mic when backgrounded; we restart on
+return. See `docs/implementation-plan.md`.
 
 **Live:** https://server-production-1374.up.railway.app
 

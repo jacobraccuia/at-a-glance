@@ -11,6 +11,7 @@ import {
 import { parseConversationMessage } from "../lib/assistant/conversationParser.js";
 import { executeAssistantPlan, fallbackPlanFromText } from "../lib/assistant/executor.js";
 import { DEFAULT_EASY_WIN_MINUTES, rankEasyWins } from "../lib/assistant/easyWins.js";
+import { synthesizeSpeech } from "../lib/assistant/tts.js";
 
 export const assistantRouter = Router();
 assistantRouter.use(requireAuth);
@@ -124,7 +125,8 @@ assistantRouter.post("/message", async (req, res) => {
     todayISO,
     tz,
     buckets,
-    addToTodayDefault: false,
+    // Spoken / typed creates with no date clues land on Today.
+    addToTodayDefault: true,
   });
 
   const assistantMsg = await prisma.assistantMessage.create({
@@ -146,6 +148,32 @@ assistantRouter.post("/message", async (req, res) => {
     message: assistantMsg,
     executed: result.executed,
   });
+});
+
+// ---------- Text-to-speech for Talk sheet replies ----------
+
+const speakSchema = z.object({
+  text: z.string().min(1).max(2000),
+});
+
+assistantRouter.post("/speak", async (req, res) => {
+  const parsed = speakSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+  try {
+    const audio = await synthesizeSpeech(parsed.data.text);
+    if (!audio) {
+      // No OPENAI_API_KEY — client falls back to browser speechSynthesis.
+      return res.status(503).json({ error: "tts_unavailable" });
+    }
+    res.setHeader("Content-Type", "audio/mpeg");
+    res.setHeader("Cache-Control", "no-store");
+    return res.send(audio);
+  } catch (e) {
+    console.error("TTS failed", e);
+    return res.status(502).json({ error: "tts_failed" });
+  }
 });
 
 // ---------- Easy Wins (also used by the home strip without a chat turn) ----------
