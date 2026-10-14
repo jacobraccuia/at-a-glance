@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { api } from "../api/client";
 import { branding } from "../config/branding";
-import { useConversationMic } from "../hooks/useConversationMic";
+import { DEFAULT_SILENCE_MS, useConversationMic } from "../hooks/useConversationMic";
 import { useVoiceSession } from "../voice/VoiceSessionContext";
 import { ArrowRightIcon, MicIcon } from "./icons";
 
@@ -41,8 +41,8 @@ interface Conversation {
 }
 
 /**
- * Pull-up conversation sheet. Voice-first: pause ends a turn.
- * Type fallback always available. Stays on whatever page was underneath.
+ * Pull-up conversation sheet. Voice-first: longer pause or "Done talking"
+ * ends a turn. Mic stays warm while the assistant thinks (mobile-safe).
  */
 export function VoiceSheet() {
   const { open, closeSession } = useVoiceSession();
@@ -55,7 +55,6 @@ export function VoiceSheet() {
   const [loaded, setLoaded] = useState(false);
   const [lastActivity, setLastActivity] = useState(Date.now());
   const scrollerRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sendingRef = useRef(false);
 
   const bumpActivity = useCallback(() => setLastActivity(Date.now()), []);
@@ -110,9 +109,11 @@ export function VoiceSheet() {
     [bumpActivity, conversationId],
   );
 
-  const micActive = open && !sending;
+  // Keep mic warm while thinking — only mute acceptance, don't tear down.
   const mic = useConversationMic({
-    active: micActive,
+    active: open,
+    muted: sending,
+    silenceMs: DEFAULT_SILENCE_MS,
     onUtterance: (text) => {
       void send(text);
     },
@@ -120,7 +121,6 @@ export function VoiceSheet() {
     onActivity: bumpActivity,
   });
 
-  // Load / refresh conversation when sheet opens.
   useEffect(() => {
     if (!open) return;
     setLoaded(false);
@@ -147,7 +147,6 @@ export function VoiceSheet() {
     if (open) scrollToBottom();
   }, [messages, partial, sending, open, scrollToBottom]);
 
-  // Idle close after 30s of no speech / typing / replies.
   useEffect(() => {
     if (!open) return;
     const remaining = IDLE_CLOSE_MS - (Date.now() - lastActivity);
@@ -155,7 +154,6 @@ export function VoiceSheet() {
     return () => clearTimeout(t);
   }, [open, lastActivity, closeSession]);
 
-  // Escape closes.
   useEffect(() => {
     if (!open) return;
     function onKey(e: globalThis.KeyboardEvent) {
@@ -202,17 +200,38 @@ export function VoiceSheet() {
     }
   }
 
+  function onDoneTalking() {
+    bumpActivity();
+    if (partial.trim()) {
+      mic.flushNow();
+    }
+  }
+
   if (!open) return null;
+
+  const hasSpeech = Boolean(partial.trim());
+  const orbClass =
+    mic.phase === "hearing"
+      ? "hearing"
+      : mic.phase === "muted"
+        ? "muted"
+        : mic.phase === "reconnecting"
+          ? "reconnect"
+          : mic.phase === "listening"
+            ? "live"
+            : "";
 
   const statusLabel = sending
     ? "Thinking…"
-    : mic.listening
-      ? partial
-        ? "Listening…"
-        : "Listening — pause when you're done"
-      : mic.supported
-        ? "Tap below to type, or wait for mic"
-        : "Type your message";
+    : mic.phase === "reconnecting"
+      ? "Reconnecting mic…"
+      : mic.phase === "hearing"
+        ? "Got it — pause or tap Done when finished"
+        : mic.phase === "listening"
+          ? "Listening — take your time"
+          : mic.supported
+            ? "Starting mic…"
+            : "Type your message";
 
   return (
     <div className="voice-sheet-root" role="dialog" aria-modal="true" aria-label={`Talk to ${branding.assistantName}`}>
@@ -240,10 +259,10 @@ export function VoiceSheet() {
           {!loaded && <p className="muted">Loading…</p>}
           {loaded && messages.length === 0 && !partial && (
             <div className="voice-sheet-empty">
-              <div className={`voice-orb${mic.listening ? " live" : ""}`} aria-hidden>
+              <div className={`voice-orb ${orbClass}`.trim()} aria-hidden>
                 <MicIcon />
               </div>
-              <p>Talk when you're ready. Pause and I'll reply.</p>
+              <p>Talk when you're ready. Pause a beat — or tap Done — and I'll reply.</p>
             </div>
           )}
           {messages.map((m) => {
@@ -282,13 +301,23 @@ export function VoiceSheet() {
 
         {(error || mic.error) && <p className="assistant-error">{error || mic.error}</p>}
 
-        <form
-          className="voice-sheet-composer"
-          onSubmit={onSubmit}
-          onFocus={bumpActivity}
-        >
+        <div className="voice-sheet-controls">
+          <div className={`voice-orb compact ${orbClass}`.trim()} aria-hidden>
+            <MicIcon />
+          </div>
+          <button
+            type="button"
+            className="voice-done-btn"
+            onClick={onDoneTalking}
+            disabled={sending || !hasSpeech}
+            aria-label="Done talking"
+          >
+            Done talking
+          </button>
+        </div>
+
+        <form className="voice-sheet-composer" onSubmit={onSubmit} onFocus={bumpActivity}>
           <textarea
-            ref={textareaRef}
             rows={1}
             value={draft}
             onChange={(e) => {

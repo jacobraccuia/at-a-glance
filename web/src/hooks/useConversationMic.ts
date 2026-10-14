@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface SpeechRecognitionLike extends EventTarget {
   continuous: boolean;
@@ -9,7 +9,7 @@ interface SpeechRecognitionLike extends EventTarget {
   abort(): void;
   onresult: ((ev: SpeechRecognitionEventLike) => void) | null;
   onerror: ((ev: { error: string }) => void) | null;
-  onend: (() => void) | null;
+  onend: ((ev?: Event) => void) | null;
 }
 
 interface SpeechRecognitionEventLike {
@@ -27,12 +27,18 @@ function getSpeechRecognitionCtor(): SpeechRecognitionCtor | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
-const DEFAULT_SILENCE_MS = 1400;
+/** Longer than v1 — ChatGPT waits through thinking pauses; 1.4s felt interruptive. */
+export const DEFAULT_SILENCE_MS = 2800;
+const RESTART_DELAY_MS = 600;
+const AUDIO_CAPTURE_BACKOFF_MS = [700, 1400, 2800, 4500];
+
+export type MicPhase = "off" | "listening" | "hearing" | "reconnecting" | "muted";
 
 export interface ConversationMicOptions {
-  /** When true, keep the mic session alive and listen for turns. */
+  /** Sheet open — keep (or recover) the mic session. */
   active: boolean;
-  /** Pause after speech settles; then fire once per utterance. */
+  /** While assistant is thinking: stay warm, ignore new utterances. */
+  muted?: boolean;
   silenceMs?: number;
   onUtterance: (text: string) => void;
   onPartial?: (text: string) => void;
@@ -40,22 +46,35 @@ export interface ConversationMicOptions {
 }
 
 /**
- * Conversation-style mic: listen → pause = end of turn → callback.
- * Tries to restart after browser `onend` and after returning from background
- * (web browsers often still kill the mic when backgrounded — we re-open on focus).
+ * Conversation mic: keep the session warm across turns (don't tear down
+ * while the assistant thinks — that caused iOS "No microphone found").
+ * Pause ≈ end of turn; flushNow() for an explicit "Done talking" tap.
  */
 export function useConversationMic(opts: ConversationMicOptions) {
-  const { active, silenceMs = DEFAULT_SILENCE_MS, onUtterance, onPartial, onActivity } = opts;
+  const {
+    active,
+    muted = false,
+    silenceMs = DEFAULT_SILENCE_MS,
+    onUtterance,
+    onPartial,
+    onActivity,
+  } = opts;
+
   const [listening, setListening] = useState(false);
+  const [phase, setPhase] = useState<MicPhase>("off");
   const [error, setError] = useState<string | null>(null);
   const [supported] = useState(() => Boolean(getSpeechRecognitionCtor()));
 
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const wantListenRef = useRef(false);
+  const mutedRef = useRef(muted);
   const finalsRef = useRef("");
+  const partialRef = useRef("");
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const emittingRef = useRef(false);
+  const captureFailsRef = useRef(0);
+  const startingRef = useRef(false);
 
   const onUtteranceRef = useRef(onUtterance);
   const onPartialRef = useRef(onPartial);
@@ -63,6 +82,7 @@ export function useConversationMic(opts: ConversationMicOptions) {
   onUtteranceRef.current = onUtterance;
   onPartialRef.current = onPartial;
   onActivityRef.current = onActivity;
+  mutedRef.current = muted;
 
   function clearSilence() {
     if (silenceTimerRef.current) {
@@ -78,30 +98,45 @@ export function useConversationMic(opts: ConversationMicOptions) {
     }
   }
 
-  function emitUtterance() {
-    const text = finalsRef.current.trim();
+  function clearBuffers() {
+    finalsRef.current = "";
+    partialRef.current = "";
+    onPartialRef.current?.("");
+  }
+
+  const emitUtteranceRef = useRef(() => {});
+  emitUtteranceRef.current = () => {
+    // Prefer committed finals; fall back to live partial so "Done talking" works mid-phrase.
+    const text = (finalsRef.current || partialRef.current).trim();
     clearSilence();
-    if (!text || emittingRef.current) return;
+    if (!text || emittingRef.current || mutedRef.current) return;
     emittingRef.current = true;
     finalsRef.current = "";
+    partialRef.current = "";
     onPartialRef.current?.("");
     onUtteranceRef.current(text);
-    // Parent sets active=false while sending; unlock on next listen cycle.
     setTimeout(() => {
       emittingRef.current = false;
     }, 0);
-  }
+  };
+
+  const flushNow = useCallback(() => {
+    if (mutedRef.current) return;
+    emitUtteranceRef.current();
+  }, []);
 
   function scheduleSilenceFlush() {
+    if (mutedRef.current) return;
     clearSilence();
     silenceTimerRef.current = setTimeout(() => {
-      emitUtterance();
+      emitUtteranceRef.current();
     }, silenceMs);
   }
 
   function hardStop() {
     clearSilence();
     clearRestart();
+    startingRef.current = false;
     const rec = recognitionRef.current;
     recognitionRef.current = null;
     if (rec) {
@@ -109,26 +144,41 @@ export function useConversationMic(opts: ConversationMicOptions) {
         rec.onresult = null;
         rec.onerror = null;
         rec.onend = null;
-        rec.stop();
+        rec.abort();
       } catch {
-        // already stopped
+        try {
+          rec.stop();
+        } catch {
+          // already stopped
+        }
       }
     }
     setListening(false);
+    setPhase("off");
+  }
+
+  function scheduleRestart(delayMs: number) {
+    clearRestart();
+    restartTimerRef.current = setTimeout(() => {
+      if (wantListenRef.current) startRecognition();
+    }, delayMs);
   }
 
   function startRecognition() {
     const Ctor = getSpeechRecognitionCtor();
     if (!Ctor || !wantListenRef.current) return;
-    if (recognitionRef.current) return;
+    if (recognitionRef.current || startingRef.current) return;
 
+    startingRef.current = true;
     setError(null);
+
     const rec = new Ctor();
     rec.continuous = true;
     rec.interimResults = true;
     rec.lang = navigator.language || "en-US";
 
     rec.onresult = (ev) => {
+      if (mutedRef.current) return;
       onActivityRef.current?.();
       let interim = "";
       let gotFinal = false;
@@ -142,11 +192,14 @@ export function useConversationMic(opts: ConversationMicOptions) {
         }
       }
       const shown = `${finalsRef.current}${interim ? ` ${interim}` : ""}`.trim();
+      partialRef.current = shown;
       onPartialRef.current?.(shown);
+      setPhase(shown ? "hearing" : "listening");
       if (gotFinal || interim) scheduleSilenceFlush();
     };
 
     rec.onerror = (ev) => {
+      startingRef.current = false;
       if (ev.error === "not-allowed" || ev.error === "service-not-allowed") {
         setError("Microphone permission denied.");
         wantListenRef.current = false;
@@ -154,79 +207,108 @@ export function useConversationMic(opts: ConversationMicOptions) {
         return;
       }
       if (ev.error === "audio-capture") {
-        setError("No microphone found.");
-        wantListenRef.current = false;
-        hardStop();
+        // Mic still releasing from the previous session (common on iOS).
+        // Retry with backoff — do NOT kill the conversation.
+        captureFailsRef.current += 1;
+        const idx = Math.min(captureFailsRef.current - 1, AUDIO_CAPTURE_BACKOFF_MS.length - 1);
+        const delay = AUDIO_CAPTURE_BACKOFF_MS[idx];
+        setPhase("reconnecting");
+        setError(captureFailsRef.current >= 3 ? "Reconnecting mic…" : null);
+        recognitionRef.current = null;
+        setListening(false);
+        if (wantListenRef.current) scheduleRestart(delay);
         return;
       }
-      // no-speech / aborted: let onend restart if we still want listen
       if (ev.error !== "aborted" && ev.error !== "no-speech") {
         setError(`Voice error: ${ev.error}`);
       }
     };
 
     rec.onend = () => {
+      startingRef.current = false;
       recognitionRef.current = null;
       setListening(false);
-      if (!wantListenRef.current) return;
-      // Browsers end the session often; restart if the sheet still wants listen.
-      clearRestart();
-      restartTimerRef.current = setTimeout(() => {
-        if (wantListenRef.current) startRecognition();
-      }, 180);
+      if (!wantListenRef.current) {
+        setPhase("off");
+        return;
+      }
+      if (mutedRef.current) {
+        setPhase("muted");
+        // Stay warm: restart even while muted so we're ready when thinking ends.
+        scheduleRestart(RESTART_DELAY_MS);
+        return;
+      }
+      setPhase("reconnecting");
+      scheduleRestart(RESTART_DELAY_MS);
     };
 
     try {
       rec.start();
       recognitionRef.current = rec;
+      startingRef.current = false;
+      captureFailsRef.current = 0;
       setListening(true);
+      setPhase(mutedRef.current ? "muted" : "listening");
+      setError(null);
     } catch {
+      startingRef.current = false;
       recognitionRef.current = null;
       setListening(false);
-      clearRestart();
-      restartTimerRef.current = setTimeout(() => {
-        if (wantListenRef.current) startRecognition();
-      }, 400);
+      setPhase("reconnecting");
+      scheduleRestart(RESTART_DELAY_MS + 200);
     }
   }
 
-  // Drive listen from `active`.
+  // Sheet open/close.
   useEffect(() => {
     wantListenRef.current = active;
     if (active) {
-      finalsRef.current = "";
       emittingRef.current = false;
+      captureFailsRef.current = 0;
       startRecognition();
     } else {
       hardStop();
-      finalsRef.current = "";
-      onPartialRef.current?.("");
+      clearBuffers();
+      setError(null);
     }
     return () => {
       wantListenRef.current = false;
       hardStop();
     };
-    // intentionally only react to active — callbacks via refs
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
-  // Re-open mic when returning from background if session still active.
+  // Thinking: mute acceptance, keep mic warm (no tear-down).
+  useEffect(() => {
+    mutedRef.current = muted;
+    if (!active) return;
+    if (muted) {
+      clearSilence();
+      clearBuffers();
+      setPhase(listening ? "muted" : "reconnecting");
+    } else {
+      setPhase(listening ? "listening" : "reconnecting");
+      if (!recognitionRef.current && wantListenRef.current) {
+        scheduleRestart(RESTART_DELAY_MS);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [muted, active]);
+
+  // Recover after backgrounding.
   useEffect(() => {
     function onVisibility() {
       if (document.visibilityState === "visible" && wantListenRef.current) {
         onActivityRef.current?.();
-        if (!recognitionRef.current) startRecognition();
+        if (!recognitionRef.current) scheduleRestart(RESTART_DELAY_MS);
       }
-      // When hidden: do NOT call stop — keep recognition alive as long as the
-      // browser allows (ChatGPT-like). Many mobile browsers still suspend it;
-      // the visible handler above recovers.
     }
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Keep the screen awake while listening so mobile doesn't sleep mid-convo.
+  // Screen wake lock while session open.
   useEffect(() => {
     if (!active) return;
     let lock: WakeLockSentinel | null = null;
@@ -240,7 +322,7 @@ export function useConversationMic(opts: ConversationMicOptions) {
           lock = null;
         }
       } catch {
-        // unsupported / denied — non-fatal
+        // non-fatal
       }
     }
     void requestLock();
@@ -257,8 +339,10 @@ export function useConversationMic(opts: ConversationMicOptions) {
 
   return {
     listening,
+    phase,
     error,
     supported,
+    flushNow,
     clearError: () => setError(null),
   };
 }

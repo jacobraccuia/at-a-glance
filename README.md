@@ -63,8 +63,8 @@ cp .env.example .env
 npm run dev   # starts on http://localhost:5173
 ```
 
-Open `http://localhost:5173`, log in with `demo@example.com` / `password123`
-(or register a new account).
+Open `http://localhost:5173`, tap **Try as guest** (sample tasks, no account),
+or log in with `demo@example.com` / `password123` / register.
 
 ## Project layout
 

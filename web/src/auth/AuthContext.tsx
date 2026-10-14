@@ -7,6 +7,7 @@ interface AuthContextValue {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, displayName: string, timezone: string) => Promise<void>;
+  continueAsGuest: (timezone: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -38,12 +39,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(u);
   }, []);
 
+  const continueAsGuest = useCallback(async (timezone: string) => {
+    const u = await api.post<User>("/auth/guest", { timezone });
+    setUser(u);
+  }, []);
+
   const logout = useCallback(async () => {
     await api.post("/auth/logout");
     setUser(null);
   }, []);
 
-  return <AuthContext.Provider value={{ user, loading, login, register, logout }}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={{ user, loading, login, register, continueAsGuest, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth() {

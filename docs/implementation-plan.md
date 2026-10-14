@@ -137,6 +137,11 @@ fallback when no API key is configured or the call fails/times out):
       conversation. Home (`/`) is a quiet glance + Easy Wins.
 - [x] Mic lives on the Talk sheet (Web Speech conversation loop), not on
       Today quick-add. Quick-add remains a text-only fast dump.
+- [x] Talk-sheet mic kept warm across turns (no hard stop while thinking);
+      longer end-of-turn silence (~2.8s) + **Done talking** tap; soft
+      `audio-capture` reconnect (fixes iOS "No microphone found" after reply).
+- [x] Guest mode: `POST /api/auth/guest` + login **Try as guest** (seeded
+      sample tasks, throwaway `@guest.taskr.local` users).
 - [x] Easy Wins: rules-based ranker (`easyWins.ts`) + `GET /api/assistant/easy-wins`
       + `easy_wins` assistant action. Home strip + chat replies surface
       short-budget picks ("I have 25 minutes…"). Transparent scoring, not

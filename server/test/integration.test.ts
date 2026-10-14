@@ -373,3 +373,30 @@ describe("Phase 1 core flows", () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe("Guest mode", () => {
+  const guestIds: string[] = [];
+
+  afterAll(async () => {
+    for (const id of guestIds) {
+      await prisma.user.delete({ where: { id } }).catch(() => undefined);
+    }
+  });
+
+  it("creates a throwaway guest with sample tasks", async () => {
+    const guestAgent = request.agent(app);
+    const res = await guestAgent.post("/api/auth/guest").send({ timezone: "America/New_York" });
+    expect(res.status).toBe(201);
+    expect(res.body.isGuest).toBe(true);
+    expect(res.body.displayName).toBe("Guest");
+    guestIds.push(res.body.id);
+
+    const me = await guestAgent.get("/api/auth/me");
+    expect(me.status).toBe(200);
+    expect(me.body.isGuest).toBe(true);
+
+    const tasks = await guestAgent.get("/api/tasks?view=all");
+    expect(tasks.status).toBe(200);
+    expect(tasks.body.length).toBeGreaterThanOrEqual(3);
+  });
+});

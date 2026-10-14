@@ -80,10 +80,15 @@ export function Layout() {
           </button>
         </nav>
         <div className="user-area">
-          <span>{user?.displayName}</span>
-          <button onClick={onLogout}>Log out</button>
+          <span>{user?.isGuest ? "Guest" : user?.displayName}</span>
+          <button onClick={onLogout}>{user?.isGuest ? "End guest" : "Log out"}</button>
         </div>
       </header>
+      {user?.isGuest && (
+        <div className="guest-banner" role="status">
+          Guest mode — sample data, nothing permanent. Tap Talk to try voice.
+        </div>
+      )}
       <main>
         <Outlet />
       </main>

@@ -2,6 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcrypt";
 import { z } from "zod";
 import { prisma } from "../db/client.js";
+import { createGuestUser, publicUser } from "../lib/guest.js";
 
 export const authRouter = Router();
 
@@ -35,11 +36,7 @@ authRouter.post("/register", async (req, res) => {
   });
 
   req.session.userId = user.id;
-  return res.status(201).json({
-    id: user.id,
-    email: user.email,
-    displayName: user.displayName,
-  });
+  return res.status(201).json(publicUser(user, timezone));
 });
 
 const loginSchema = z.object({
@@ -54,7 +51,10 @@ authRouter.post("/login", async (req, res) => {
   }
   const { email, password } = parsed.data;
 
-  const user = await prisma.user.findUnique({ where: { email } });
+  const user = await prisma.user.findUnique({
+    where: { email },
+    include: { preferences: true },
+  });
   if (!user) {
     return res.status(401).json({ error: "Invalid credentials" });
   }
@@ -64,7 +64,22 @@ authRouter.post("/login", async (req, res) => {
   }
 
   req.session.userId = user.id;
-  return res.json({ id: user.id, email: user.email, displayName: user.displayName });
+  return res.json(publicUser(user, user.preferences?.timezone ?? "UTC"));
+});
+
+const guestSchema = z.object({
+  timezone: z.string().min(1).max(100).default("UTC"),
+});
+
+/** One-tap throwaway account for phone / feature testing. */
+authRouter.post("/guest", async (req, res) => {
+  const parsed = guestSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+  const user = await createGuestUser(parsed.data.timezone);
+  req.session.userId = user.id;
+  return res.status(201).json(publicUser(user, parsed.data.timezone));
 });
 
 authRouter.post("/logout", (req, res) => {
@@ -84,10 +99,5 @@ authRouter.get("/me", async (req, res) => {
   if (!user) {
     return res.status(401).json({ error: "Not authenticated" });
   }
-  return res.json({
-    id: user.id,
-    email: user.email,
-    displayName: user.displayName,
-    timezone: user.preferences?.timezone ?? "UTC",
-  });
+  return res.json(publicUser(user, user.preferences?.timezone ?? "UTC"));
 });

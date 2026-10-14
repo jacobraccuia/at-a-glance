@@ -3,6 +3,7 @@ export interface User {
   email: string;
   displayName: string;
   timezone: string;
+  isGuest?: boolean;
 }
 
 export interface Bucket {

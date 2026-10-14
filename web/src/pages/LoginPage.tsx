@@ -5,7 +5,7 @@ import { branding } from "../config/branding";
 import { ApiError } from "../api/client";
 
 export function LoginPage() {
-  const { login, register } = useAuth();
+  const { login, register, continueAsGuest } = useAuth();
   const navigate = useNavigate();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
@@ -29,6 +29,19 @@ export function LoginPage() {
       navigate("/");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function onGuest() {
+    setError(null);
+    setSubmitting(true);
+    try {
+      await continueAsGuest(timezone);
+      navigate("/");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Couldn't start guest session");
     } finally {
       setSubmitting(false);
     }
@@ -58,7 +71,11 @@ export function LoginPage() {
           {mode === "login" ? "Log in" : "Create account"}
         </button>
       </form>
-      <button className="link-button" onClick={() => setMode(mode === "login" ? "register" : "login")}>
+      <button type="button" className="guest-button" onClick={onGuest} disabled={submitting}>
+        Try as guest
+      </button>
+      <p className="muted small guest-hint">No account — sample tasks, good for phone testing.</p>
+      <button type="button" className="link-button" onClick={() => setMode(mode === "login" ? "register" : "login")}>
         {mode === "login" ? "Need an account? Register" : "Already have an account? Log in"}
       </button>
     </div>

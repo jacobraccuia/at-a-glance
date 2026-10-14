@@ -183,6 +183,36 @@ button:focus-visible {
   font-weight: 500;
 }
 
+.guest-button {
+  margin-top: 14px;
+  width: 100%;
+  max-width: 380px;
+  align-self: center;
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.guest-button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.guest-hint {
+  margin: 8px 0 0;
+}
+
+.guest-banner {
+  margin: -8px 0 12px;
+  padding: 8px 12px;
+  font-size: 0.8rem;
+  color: var(--ink);
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border));
+  border-radius: var(--radius-sm);
+}
+
 /* ---------- App shell + header ---------- */
 
 .app-shell {
@@ -477,6 +507,7 @@ button:focus-visible {
   justify-content: center;
   background: var(--accent-soft);
   color: var(--accent);
+  transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
 }
 
 .voice-orb svg {
@@ -485,10 +516,60 @@ button:focus-visible {
   stroke: currentColor;
 }
 
+.voice-orb.compact {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+}
+
+.voice-orb.compact svg {
+  width: 20px;
+  height: 20px;
+}
+
 .voice-orb.live {
+  background: var(--accent);
+  color: #fff;
+  animation: mic-pulse 1.8s ease-in-out infinite;
+}
+
+.voice-orb.hearing {
   background: var(--danger);
   color: #fff;
-  animation: mic-pulse 1.4s ease-in-out infinite;
+  transform: scale(1.06);
+  animation: mic-pulse 1s ease-in-out infinite;
+}
+
+.voice-orb.muted {
+  background: var(--border);
+  color: var(--muted);
+  animation: none;
+}
+
+.voice-orb.reconnect {
+  background: var(--accent-soft);
+  color: var(--muted);
+  animation: mic-pulse 2.2s ease-in-out infinite;
+}
+
+.voice-sheet-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px 0;
+}
+
+.voice-done-btn {
+  flex: 1;
+  min-height: 44px;
+  font-weight: 600;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.voice-done-btn:disabled {
+  opacity: 0.45;
 }
 
 .assistant-bubble.partial .assistant-bubble-body {
