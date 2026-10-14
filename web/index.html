@@ -10,7 +10,21 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Taskr" />
-    <meta name="theme-color" content="#4062bb" />
+    <meta name="theme-color" content="#2f5bd3" />
+    <script>
+      (function () {
+        var choice = "auto";
+        try {
+          choice = localStorage.getItem("taskr.palette") || "auto";
+        } catch (e) {}
+        var h = new Date().getHours();
+        var theme = choice;
+        if (choice !== "clear" && choice !== "warm" && choice !== "dusk") {
+          theme = h >= 5 && h < 11 ? "warm" : h >= 11 && h < 17 ? "clear" : "dusk";
+        }
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

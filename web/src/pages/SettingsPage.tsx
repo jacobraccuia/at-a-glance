@@ -1,3 +1,4 @@
+import { PalettePicker } from "../components/PalettePicker";
 import { BucketsPage } from "./BucketsPage";
 
 /**
@@ -6,7 +7,9 @@ import { BucketsPage } from "./BucketsPage";
  */
 export function SettingsPage() {
   return (
-    <div className="settings-page">
+    <div className="page settings-page">
+      <h1>Settings</h1>
+      <PalettePicker />
       <BucketsPage />
     </div>
   );

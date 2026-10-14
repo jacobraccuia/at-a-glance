@@ -1,22 +1,17 @@
-:root {
-  /* Palette notes: shifted the old flat grey (--muted was a true neutral
-     grey, --ink was near-black) toward a slate-blue undertone that pairs
-     with --accent, and deepened --accent/--success slightly so completed/
-     important states feel more alive. Research basis: blue reads as the
-     most universally "trusted + calm" color (why most productivity/health/
-     finance apps lean blue); desaturated *warm or cool-tinted* neutrals
-     read as more human than flat grey; a slightly more saturated success
-     green gives a small positive hit on completion, which matters for
-     habit formation / return visits. This is a deliberate first pass --
-     a proper theme-preset system (+ time-of-day mood gradients) is a
-     separate, larger follow-up, not done here. */
-  --bg: #f7f6f2;
+:root,
+[data-theme="clear"] {
+  /* Clear — daylight sky. Warm — morning sun. Dusk — evening wash.
+     Auto picks by local hour. Surfaces stay light so iOS form controls
+     don't flip to white-on-white in system dark mode. */
+  --bg-top: #d5e7ff;
+  --bg-glow: rgba(110, 168, 255, 0.55);
+  --bg: #f3f7fc;
   --surface: #ffffff;
-  --ink: #23262b;
-  --muted: #68707c;
-  --accent: #3955c7;
-  --accent-soft: #ecf0fd;
-  --border: #e3e0d8;
+  --ink: #1e2430;
+  --muted: #5d6b80;
+  --accent: #2f5bd3;
+  --accent-soft: #e7efff;
+  --border: #d5deea;
   --danger: #c0392b;
   --danger-soft: #fbece7;
   --success: #2f9e6e;
@@ -24,14 +19,36 @@
   --radius-md: 12px;
   --radius-lg: 18px;
   --shadow-sm: 0 1px 2px rgba(43, 43, 43, 0.06);
-  --shadow-md: 0 6px 20px rgba(43, 43, 43, 0.08);
+  --shadow-md: 0 8px 24px rgba(47, 91, 211, 0.08);
   --nav-height: 64px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  /* This app only has a light theme so far. Without this, Safari/iOS in
-     system Dark Mode renders native form controls (buttons, inputs) with
-     dark-mode default text color while our CSS still forces a light
-     background -- white text on a white button, invisible. */
   color-scheme: light;
+}
+
+[data-theme="warm"] {
+  --bg-top: #ffd7ae;
+  --bg-glow: rgba(255, 168, 96, 0.55);
+  --bg: #fbf6ef;
+  --surface: #fffdf9;
+  --ink: #2c261f;
+  --muted: #7a6d60;
+  --accent: #0e7c6b;
+  --accent-soft: #e5f5f1;
+  --border: #eadfd2;
+  --shadow-md: 0 8px 24px rgba(180, 110, 50, 0.1);
+}
+
+[data-theme="dusk"] {
+  --bg-top: #cdcaf5;
+  --bg-glow: rgba(138, 126, 220, 0.5);
+  --bg: #f4f2f8;
+  --surface: #fffcff;
+  --ink: #26243a;
+  --muted: #6d6880;
+  --accent: #5a46c8;
+  --accent-soft: #eee9ff;
+  --border: #e0dbea;
+  --shadow-md: 0 8px 24px rgba(90, 70, 200, 0.1);
 }
 
 * {
@@ -45,11 +62,23 @@ body {
 
 body {
   margin: 0;
-  background: var(--bg);
   color: var(--ink);
+  background-color: var(--bg);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   overflow-x: hidden;
+}
+
+/* Fixed layer so the sky still paints on iOS, which drops background-attachment: fixed. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(900px 420px at 50% -80px, var(--bg-glow), transparent 70%),
+    linear-gradient(180deg, var(--bg-top) 0%, var(--bg) 52%);
 }
 
 h1,
@@ -236,7 +265,7 @@ button:focus-visible {
   /* Fallback solid color for browsers without color-mix() support
      (pre-iOS 16.4 Safari); color-mix() below overrides it where supported. */
   background: var(--bg);
-  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--border);
@@ -981,6 +1010,65 @@ button:focus-visible {
   margin: 4px 0 12px;
   font-size: 1rem;
   font-weight: 600;
+}
+
+.palette-picker {
+  margin: 0 0 22px;
+}
+
+.palette-picker-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.palette-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.palette-swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: unset;
+  padding: 8px;
+  text-align: left;
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.palette-swatch.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.palette-swatch-sky {
+  width: 100%;
+  height: 36px;
+  border-radius: 8px;
+  margin-bottom: 4px;
+}
+
+.sky-clear {
+  background: linear-gradient(180deg, #d5e7ff, #f3f7fc);
+}
+
+.sky-warm {
+  background: linear-gradient(180deg, #ffd7ae, #fbf6ef);
+}
+
+.sky-dusk {
+  background: linear-gradient(180deg, #cdcaf5, #f4f2f8);
+}
+
+.auto-sky {
+  background: linear-gradient(90deg, #ffd7ae 0%, #d5e7ff 50%, #cdcaf5 100%);
 }
 
 .easy-win-chip:hover {
