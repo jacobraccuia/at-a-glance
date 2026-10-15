@@ -8,7 +8,6 @@
 import { z } from "zod";
 import OpenAI from "openai";
 import { zodResponseFormat } from "openai/helpers/zod";
-import type { CaptureIntent } from "./intentParser.js";
 
 const CaptureItemSchema = z.object({
   cleanTitle: z.string(),
@@ -18,6 +17,10 @@ const CaptureItemSchema = z.object({
   waitingOn: z.string().nullable(),
   dateKind: z.enum(["none", "soft", "hard"]),
   dateDaysFromNow: z.number().int().min(0).max(365).nullable(),
+  // "every Monday" / "every day". "none" for a one-off.
+  repeat: z.enum(["none", "daily", "weekly", "monthly"]).optional(),
+  // 0=Sunday … 6=Saturday. Required when repeat is weekly and they named a day.
+  repeatWeekday: z.number().int().min(0).max(6).nullable().optional(),
 });
 
 const AssistantActionSchema = z.discriminatedUnion("type", [
@@ -52,6 +55,12 @@ const AssistantActionSchema = z.discriminatedUnion("type", [
     scope: z.enum(["today", "upcoming", "later", "all"]),
   }),
   z.object({
+    // Correct how long an existing task takes. Do not create a second task.
+    type: z.literal("set_estimate"),
+    taskQuery: z.string().min(1),
+    minutes: z.number().int().min(1).max(1440),
+  }),
+  z.object({
     // Surface short, unblocked tasks that fit a time budget ("I have 25 minutes").
     // The server ranks them with transparent rules -- you just pick this action
     // and optionally pass the minute budget the user mentioned (null = 25).
@@ -82,7 +91,7 @@ const AssistantPlanSchema = z.object({
 
 export type AssistantAction = z.infer<typeof AssistantActionSchema>;
 export type AssistantPlan = z.infer<typeof AssistantPlanSchema>;
-export type CaptureItem = CaptureIntent;
+export type CaptureItem = z.infer<typeof CaptureItemSchema>;
 
 export interface ConversationTurn {
   role: "user" | "assistant";
@@ -172,6 +181,12 @@ export async function parseConversationMessage(
     "  Scheduling: dateKind 'none' = Today (default when no date clues).",
     "  \"later\" / \"someday\" / \"not today\" / \"backlog\" → dateKind 'soft' with dateDaysFromNow null (inbox).",
     "  Named days (Friday, next week) → soft/hard with the weekday offset table.",
+    "  Recurrence: \"every Monday\" / \"every day\" / \"every month\" sets repeat to weekly/daily/monthly.",
+    "  repeatWeekday is 0=Sunday through 6=Saturday (Monday=1). Otherwise repeat is \"none\" and repeatWeekday is null.",
+    "  Strip the schedule words out of cleanTitle (\"Call Mom\", not \"Every Monday call Mom\").",
+    "  A repeating task is not also dumped onto Today as a one-off.",
+    "- set_estimate: they are correcting duration on an EXISTING task (\"that takes 3 hours, not 30 minutes\",",
+    "  \"the plants take 10 minutes\"). Set minutes (3 hours = 180). Do NOT create a new task for a correction.",
     "- complete / drop / snooze / reopen / add_to_today: set taskQuery to a short phrase from the user's",
     "  words that identifies the task. Prefer clarify if more than one open task could match.",
     "- list: when they ask what's on today / upcoming / later / everything.",

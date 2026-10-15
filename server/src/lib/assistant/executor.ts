@@ -4,6 +4,7 @@
 // become clarify results instead of guessing the wrong task.
 import type { PrismaClient, Task } from "@prisma/client";
 import { logTaskEvent } from "../taskEvents.js";
+import { generateOccurrenceDates } from "../recurrence.js";
 import { addDaysToDateString, startOfDayInTimeZone } from "../timezone.js";
 import type { AssistantAction, AssistantPlan, CaptureItem } from "./conversationParser.js";
 import { DEFAULT_EASY_WIN_MINUTES, formatEasyWinsSummary, rankEasyWins, type EasyWin } from "./easyWins.js";
@@ -103,11 +104,51 @@ async function loadOpenTasks(prisma: PrismaClient, userId: string): Promise<Task
   });
 }
 
+const REPEAT_HORIZON_DAYS = 90;
+
+function isRepeating(item: CaptureItem): boolean {
+  return Boolean(item.repeat && item.repeat !== "none");
+}
+
+async function attachRecurrence(ctx: ExecContext, taskId: string, item: CaptureItem): Promise<void> {
+  if (!isRepeating(item) || !item.repeat) return;
+  const rule = await ctx.prisma.recurrenceRule.create({
+    data: {
+      frequency: item.repeat,
+      interval: 1,
+      byWeekday: item.repeat === "weekly" && item.repeatWeekday != null ? [item.repeatWeekday] : [],
+      startDate: new Date(`${ctx.todayISO}T00:00:00.000Z`),
+    },
+  });
+  await ctx.prisma.task.update({
+    where: { id: taskId },
+    data: { recurrenceRuleId: rule.id, status: "active", attentionDate: null },
+  });
+  const horizonEnd = addDaysToDateString(ctx.todayISO, REPEAT_HORIZON_DAYS);
+  const dates = generateOccurrenceDates(
+    {
+      frequency: item.repeat,
+      interval: 1,
+      byWeekday: item.repeat === "weekly" && item.repeatWeekday != null ? [item.repeatWeekday] : [],
+      startDate: ctx.todayISO,
+    },
+    ctx.todayISO,
+    horizonEnd,
+  );
+  for (const dateStr of dates) {
+    await ctx.prisma.taskOccurrence.upsert({
+      where: { taskId_occurrenceDate: { taskId, occurrenceDate: new Date(`${dateStr}T00:00:00.000Z`) } },
+      update: {},
+      create: { taskId, occurrenceDate: new Date(`${dateStr}T00:00:00.000Z`) },
+    });
+  }
+}
+
 function buildCreateData(ctx: ExecContext, item: CaptureItem): Record<string, unknown> {
   // Inbox / Later pile: soft date with no day offset (user said later/someday).
   const parkInbox = item.dateKind === "soft" && item.dateDaysFromNow == null;
-  // Default: no date clues → Today when addToTodayDefault is on.
-  const forceToday = ctx.addToTodayDefault && item.dateKind === "none" && !parkInbox;
+  // Repeating tasks show up on their days, not as an extra one-off Today row.
+  const forceToday = !isRepeating(item) && ctx.addToTodayDefault && item.dateKind === "none" && !parkInbox;
 
   const data: Record<string, unknown> = {
     userId: ctx.userId,
@@ -147,6 +188,7 @@ const MUTATING_TYPES = new Set([
   "snooze",
   "reopen",
   "add_to_today",
+  "set_estimate",
 ]);
 
 /**
@@ -236,23 +278,70 @@ async function runAction(action: AssistantAction, ctx: ExecContext, openTasks: T
       for (const item of action.items) {
         const data = buildCreateData(ctx, item);
         const task = await ctx.prisma.task.create({ data: data as never });
+        if (isRepeating(item)) await attachRecurrence(ctx, task.id, item);
         await logTaskEvent(ctx.prisma, {
           taskId: task.id,
           userId: ctx.userId,
           type: "created",
-          payload: { via: "assistant" },
+          payload: { via: "assistant", repeat: item.repeat ?? "none" },
         });
-        const onToday = Boolean((data as { attentionDate?: Date }).attentionDate);
+        const onToday = Boolean((data as { attentionDate?: Date }).attentionDate) && !isRepeating(item);
+        const weekdayName = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+        const repeatLabel =
+          item.repeat === "daily"
+            ? "every day"
+            : item.repeat === "weekly"
+              ? `every ${item.repeatWeekday != null ? weekdayName[item.repeatWeekday] : "week"}`
+              : item.repeat === "monthly"
+                ? "every month"
+                : "";
         results.push({
           type: "create_tasks",
           ok: true,
-          summary: onToday ? `Added "${task.title}" to Today` : `Added "${task.title}"`,
+          summary: repeatLabel
+            ? `Added "${task.title}" ${repeatLabel}`
+            : onToday
+              ? `Added "${task.title}" to Today`
+              : `Added "${task.title}"`,
           taskId: task.id,
           taskTitle: task.title,
         });
         openTasks.unshift(task);
       }
       return results;
+    }
+
+    case "set_estimate": {
+      const pool = openTasks.filter((t) => t.status === "captured" || t.status === "active" || t.status === "completed");
+      const match = resolveTaskQuery(action.taskQuery, pool);
+      if (!match) {
+        return [
+          {
+            type: "set_estimate",
+            ok: false,
+            summary: `Couldn't tell which task you meant by "${action.taskQuery}". Which one?`,
+          },
+        ];
+      }
+      const updated = await ctx.prisma.task.update({
+        where: { id: match.id },
+        data: { estimateMinutes: action.minutes, estimateConfidence: "high" },
+      });
+      await logTaskEvent(ctx.prisma, {
+        taskId: match.id,
+        userId: ctx.userId,
+        type: "updated",
+        payload: { via: "assistant", estimateMinutes: action.minutes, previous: match.estimateMinutes },
+      });
+      return [
+        {
+          type: "set_estimate",
+          ok: true,
+          summary: `Set "${updated.title}" to ${action.minutes} minutes`,
+          taskId: updated.id,
+          taskTitle: updated.title,
+        },
+      ];
     }
 
     case "complete":
@@ -456,6 +545,44 @@ export function fallbackPlanFromText(text: string): AssistantPlan {
 
   if (/\bwhat('s| is) on today\b/.test(lower) || /\btoday'?s (list|tasks?)\b/.test(lower)) {
     return { reply: "Here's today.", spoken: "Here's what's on today.", actions: [{ type: "list", scope: "today" }] };
+  }
+
+  const weekdayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const;
+  const weekly = lower.match(/\bevery\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/);
+  const daily = /\bevery\s+day\b/.test(lower);
+  const monthly = /\bevery\s+month\b/.test(lower);
+  if (weekly || daily || monthly) {
+    const title = text
+      .replace(/\bevery\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday|day|month)\b/i, "")
+      .replace(/\b(remind me to|please)\b/gi, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    const cleanTitle = title || text.trim();
+    const repeat = daily ? "daily" : monthly ? "monthly" : "weekly";
+    const repeatWeekday = weekly ? weekdayNames.indexOf(weekly[1] as (typeof weekdayNames)[number]) : null;
+    const when = daily ? "every day" : monthly ? "every month" : `every ${weekly![1]}`;
+    return {
+      reply: `Got it — added "${cleanTitle}" ${when}.`,
+      spoken: `Added ${cleanTitle}, ${when}.`,
+      actions: [
+        {
+          type: "create_tasks",
+          items: [
+            {
+              cleanTitle,
+              bucketName: null,
+              importance: null,
+              estimateMinutes: null,
+              waitingOn: null,
+              dateKind: "none",
+              dateDaysFromNow: null,
+              repeat,
+              repeatWeekday,
+            },
+          ],
+        },
+      ],
+    };
   }
 
   const lines = text

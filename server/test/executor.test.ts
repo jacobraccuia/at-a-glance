@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveTaskQuery, sanitizeAssistantPlan, toSpokenLine } from "../src/lib/assistant/executor.js";
+import { fallbackPlanFromText, resolveTaskQuery, sanitizeAssistantPlan, toSpokenLine } from "../src/lib/assistant/executor.js";
 import type { Task } from "@prisma/client";
 
 function fakeTask(title: string, overrides: Partial<Task> = {}): Task {
@@ -125,5 +125,15 @@ describe("toSpokenLine", () => {
     expect(toSpokenLine('Got it — added "Call Gastro".\n\n• Added "Call Gastro" to Today', "  ")).toBe(
       'Got it — added "Call Gastro".',
     );
+  });
+});
+
+describe("fallbackPlanFromText recurrence", () => {
+  it("turns every Monday into a weekly task, not a Today one-off", () => {
+    const plan = fallbackPlanFromText("every Monday call Mom");
+    expect(plan.actions[0]).toMatchObject({
+      type: "create_tasks",
+      items: [expect.objectContaining({ cleanTitle: "call Mom", repeat: "weekly", repeatWeekday: 1 })],
+    });
   });
 });

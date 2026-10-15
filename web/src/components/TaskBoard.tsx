@@ -200,7 +200,11 @@ export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
           />
         ))}
       </ul>
-      {!loading && pending.length === 0 && occurrences.length === 0 && <p className="muted">Nothing here.</p>}
+      {!loading &&
+        pending.length === 0 &&
+        pendingOccurrences.length === 0 &&
+        completed.length === 0 &&
+        completedOccurrences.length === 0 && <p className="muted">Nothing here.</p>}
 
       {view === "today" && (completed.length > 0 || completedOccurrences.length > 0) && (
         <details className="completed-section">

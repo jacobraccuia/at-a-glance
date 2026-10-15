@@ -355,6 +355,21 @@ tasksRouter.get("/", async (req, res) => {
       orderBy: [{ hardDeadline: "asc" }, { attentionDate: "asc" }],
     });
 
+    // Today keeps a small done pile so a sparkle-away task can still be undone.
+    const completedToday =
+      view === "today"
+        ? await prisma.task.findMany({
+            where: {
+              ...baseWhere,
+              status: "completed",
+              recurrenceRuleId: null,
+              completedAt: { gte: rangeStart, lte: rangeEnd },
+            },
+            include: { bucket: true },
+            orderBy: { completedAt: "desc" },
+          })
+        : [];
+
     // Recurring tasks: occurrences whose date falls in the window.
     const occurrences = await prisma.taskOccurrence.findMany({
       where: {
@@ -365,7 +380,7 @@ tasksRouter.get("/", async (req, res) => {
       orderBy: { occurrenceDate: "asc" },
     });
 
-    return res.json({ tasks: directTasks, occurrences });
+    return res.json({ tasks: [...directTasks, ...completedToday], occurrences });
   }
 
   // "later" = captured inbox or active with no attention date (not on Today).

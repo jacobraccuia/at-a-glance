@@ -627,6 +627,13 @@ button:focus-visible {
   text-align: center;
 }
 
+button.voice-orb.hero {
+  padding: 0;
+  min-height: unset;
+  border: none;
+  cursor: pointer;
+}
+
 .voice-orb.hero {
   width: 148px;
   height: 148px;

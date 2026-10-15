@@ -310,7 +310,7 @@ export function VoiceSheet() {
   const statusLabel = sending
     ? "Thinking…"
     : ttsSpeaking
-      ? "Talking…"
+      ? "Talking… tap the glow to cut in"
       : mic.phase === "reconnecting"
         ? "Reconnecting mic…"
         : mic.phase === "hearing"
@@ -356,9 +356,20 @@ export function VoiceSheet() {
 
         {face === "live" ? (
           <div className="voice-live">
-            <div className={`voice-orb hero ${orbClass}`.trim()} aria-hidden>
-              <MicIcon />
-            </div>
+            {ttsSpeaking ? (
+              <button
+                type="button"
+                className={`voice-orb hero ${orbClass}`.trim()}
+                onClick={onDoneTalking}
+                aria-label="Stop talking and listen"
+              >
+                <MicIcon />
+              </button>
+            ) : (
+              <div className={`voice-orb hero ${orbClass}`.trim()} aria-hidden>
+                <MicIcon />
+              </div>
+            )}
             <p className="voice-sheet-status">{statusLabel}</p>
             <p className="voice-live-caption">{liveLine}</p>
             {(ttsSpeaking || hasSpeech) && (

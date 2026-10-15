@@ -113,6 +113,14 @@ export function useAssistantTts(enabled: boolean) {
         hooks?.onStart?.(durationMs);
       };
 
+      const gate: { channel: "none" | "openai" | "browser" } = { channel: "none" };
+      let browserDone: Promise<void> | null = null;
+      const early = window.setTimeout(() => {
+        if (gate.channel !== "none" || gen !== generationRef.current) return;
+        gate.channel = "browser";
+        browserDone = speakWithBrowser(text, onStart);
+      }, 420);
+
       try {
         const res = await fetch(`${API_BASE_URL}/assistant/speak`, {
           method: "POST",
@@ -123,12 +131,20 @@ export function useAssistantTts(enabled: boolean) {
         if (gen !== generationRef.current) return;
 
         if (!res.ok) {
-          await speakWithBrowser(text, onStart);
+          window.clearTimeout(early);
+          if (gate.channel === "browser" && browserDone) await browserDone;
+          else await speakWithBrowser(text, onStart);
           return;
         }
 
         const blob = await res.blob();
         if (gen !== generationRef.current) return;
+        if (gate.channel === "browser") {
+          if (browserDone) await browserDone;
+          return;
+        }
+        gate.channel = "openai";
+        window.clearTimeout(early);
         const url = URL.createObjectURL(blob);
         objectUrlRef.current = url;
         const audio = audioEl();
@@ -152,8 +168,12 @@ export function useAssistantTts(enabled: boolean) {
           if (gen === generationRef.current) await speakWithBrowser(text, onStart);
         }
       } catch {
-        if (gen === generationRef.current) await speakWithBrowser(text, onStart);
+        window.clearTimeout(early);
+        if (gen !== generationRef.current) return;
+        if (gate.channel === "browser" && browserDone) await browserDone;
+        else if (gate.channel !== "browser") await speakWithBrowser(text, onStart);
       } finally {
+        window.clearTimeout(early);
         if (!started && gen === generationRef.current) onStart(null);
         if (gen === generationRef.current) {
           if (objectUrlRef.current) {
