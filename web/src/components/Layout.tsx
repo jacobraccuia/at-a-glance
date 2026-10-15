@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { branding } from "../config/branding";
 import { useVoiceSession } from "../voice/VoiceSessionContext";
@@ -40,8 +40,8 @@ const NAV_ITEMS = [
     ),
   },
   {
-    to: "/settings",
-    label: "Settings",
+    to: "/account",
+    label: "Account",
     end: false,
     icon: (
       <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -53,14 +53,8 @@ const NAV_ITEMS = [
 ] as const;
 
 export function Layout() {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
+  const { user } = useAuth();
   const { open, openSession, toggleSession } = useVoiceSession();
-
-  async function onLogout() {
-    await logout();
-    navigate("/login");
-  }
 
   const left = NAV_ITEMS.slice(0, 2);
   const right = NAV_ITEMS.slice(2);
@@ -79,10 +73,6 @@ export function Layout() {
             Talk
           </button>
         </nav>
-        <div className="user-area">
-          <span>{user?.isGuest ? "Guest" : user?.displayName}</span>
-          <button onClick={onLogout}>{user?.isGuest ? "End guest" : "Log out"}</button>
-        </div>
       </header>
       {user?.isGuest && (
         <div className="guest-banner" role="status">

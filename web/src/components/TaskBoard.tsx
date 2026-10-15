@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
 import type { Bucket, Task, TaskOccurrence, TaskStatus, TodayViewResponse } from "../api/types";
+import { FilterIcon } from "./icons";
 import { TaskRow } from "./TaskRow";
 import { OccurrenceRow } from "./OccurrenceRow";
 import { QuickCapture } from "./QuickCapture";
@@ -30,6 +31,7 @@ export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "">("");
   const [bucketFilter, setBucketFilter] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -108,7 +110,19 @@ export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
 
   return (
     <div className="page task-board">
-      <h1>{heading}</h1>
+      <div className="board-title-row">
+        <h1>{heading}</h1>
+        <button
+          type="button"
+          className={`icon-button filter-toggle${filtersOpen || search || bucketFilter || statusFilter ? " active" : ""}`}
+          onClick={() => setFiltersOpen((o) => !o)}
+          aria-expanded={filtersOpen}
+          aria-label="Search and filter"
+          title="Search and filter"
+        >
+          <FilterIcon />
+        </button>
+      </div>
       <div className="view-filters" role="tablist" aria-label="Task view">
         {VIEW_OPTIONS.map((opt) => (
           <button
@@ -126,6 +140,7 @@ export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
 
       <QuickCapture onCaptured={load} addToToday />
 
+      {filtersOpen && (
       <div className="filters">
         <input placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} />
         {view === "all" && (
@@ -146,6 +161,7 @@ export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
           ))}
         </select>
       </div>
+      )}
 
       {error && <p className="error">{error}</p>}
       {loading && tasks.length === 0 && <p className="muted">Loading…</p>}

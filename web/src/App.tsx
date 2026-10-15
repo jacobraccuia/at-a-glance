@@ -35,8 +35,9 @@ function RouterContent() {
         <Route path="/today" element={<TodayPage />} />
         <Route path="/upcoming" element={<UpcomingPage />} />
         <Route path="/all" element={<AllTasksPage />} />
-        <Route path="/buckets" element={<Navigate to="/settings" replace />} />
-        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/buckets" element={<Navigate to="/account" replace />} />
+        <Route path="/settings" element={<Navigate to="/account" replace />} />
+        <Route path="/account" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

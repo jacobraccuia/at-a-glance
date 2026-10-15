@@ -78,7 +78,7 @@ export function HomePage() {
         {" · "}
         <Link to="/all">All tasks</Link>
         {" · "}
-        <Link to="/settings">Settings</Link>
+        <Link to="/account">Account</Link>
       </p>
     </div>
   );
