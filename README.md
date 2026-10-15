@@ -5,11 +5,11 @@ cognitive overhead. See `CURSOR_MASTER_PROMPT.md` for the full product spec
 and `docs/` for architecture, data model, implementation plan, integrations,
 and privacy documentation.
 
-**Status:** Phase 1 complete. Phase 2: talk to your tool via the center
-**Talk** mic — pull-up conversation sheet (pause / Done = end of turn,
-assistant **speaks back** via OpenAI TTS with browser fallback, 30s idle
-close, type fallback, same persisted chat). New tasks default to Today.
-Home is a quiet glance + Easy Wins. Guest login for phone testing.
+**Status:** Phase 1 complete. Phase 2: open on **Today**. Bottom bar is
+Today, a center **Talk** mic, and All. Account is the profile icon.
+Talk opens a glowing face (pause ends the turn, words appear as it
+speaks, then the conversation stays up). Easy Wins sit on Today.
+Guest login for phone testing.
 Web browsers may still suspend the mic when backgrounded; we restart on
 return. See `docs/implementation-plan.md`.
 

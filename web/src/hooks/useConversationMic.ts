@@ -27,8 +27,8 @@ function getSpeechRecognitionCtor(): SpeechRecognitionCtor | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
-/** Longer than v1 — ChatGPT waits through thinking pauses; 1.4s felt interruptive. */
-export const DEFAULT_SILENCE_MS = 2800;
+/** Pause that ends a turn. Short enough that a finished sentence sends. */
+export const DEFAULT_SILENCE_MS = 1200;
 const RESTART_DELAY_MS = 600;
 const AUDIO_CAPTURE_BACKOFF_MS = [700, 1400, 2800, 4500];
 

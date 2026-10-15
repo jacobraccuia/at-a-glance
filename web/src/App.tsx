@@ -4,7 +4,6 @@ import { LoginPage } from "./pages/LoginPage";
 import { TodayPage } from "./pages/TodayPage";
 import { UpcomingPage } from "./pages/UpcomingPage";
 import { AllTasksPage } from "./pages/AllTasksPage";
-import { HomePage } from "./pages/HomePage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { Layout } from "./components/Layout";
 import { VoiceSessionProvider } from "./voice/VoiceSessionContext";
@@ -29,10 +28,10 @@ function RouterContent() {
           </RequireAuth>
         }
       >
-        {/* Home = glance. Talk sheet (center mic) = conversation. */}
-        <Route path="/" element={<HomePage />} />
+        {/* Today is the day you open. Talk sheet stays over it. */}
+        <Route path="/" element={<TodayPage />} />
         <Route path="/assistant" element={<Navigate to="/" replace />} />
-        <Route path="/today" element={<TodayPage />} />
+        <Route path="/today" element={<Navigate to="/" replace />} />
         <Route path="/upcoming" element={<UpcomingPage />} />
         <Route path="/all" element={<AllTasksPage />} />
         <Route path="/buckets" element={<Navigate to="/account" replace />} />

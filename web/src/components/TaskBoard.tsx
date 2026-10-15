@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
 import type { Bucket, Task, TaskOccurrence, TaskStatus, TodayViewResponse } from "../api/types";
+import { EasyWinsStrip } from "./EasyWinsStrip";
 import { FilterIcon } from "./icons";
 import { TaskRow } from "./TaskRow";
 import { OccurrenceRow } from "./OccurrenceRow";
@@ -137,6 +138,8 @@ export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
           </button>
         ))}
       </div>
+
+      {view === "today" && <EasyWinsStrip />}
 
       <QuickCapture onCaptured={load} addToToday />
 

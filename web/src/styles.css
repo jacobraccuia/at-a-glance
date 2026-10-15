@@ -254,6 +254,7 @@ button:focus-visible {
 .app-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 16px;
   padding: 12px 4px;
   margin: -16px -16px 16px;
@@ -272,6 +273,30 @@ button:focus-visible {
   font-weight: 700;
   font-size: 1.05rem;
   letter-spacing: -0.01em;
+}
+
+.header-profile {
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.header-profile svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+}
+
+.header-profile.active {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 /* Desktop: inline nav lives in the header. Mobile: replaced by the fixed
@@ -589,6 +614,58 @@ button:focus-visible {
   background: var(--accent);
   color: #fff;
   animation: mic-pulse 0.9s ease-in-out infinite;
+}
+
+.voice-live {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 12px 22px 8px;
+  text-align: center;
+}
+
+.voice-orb.hero {
+  width: 148px;
+  height: 148px;
+  box-shadow:
+    0 0 0 14px color-mix(in srgb, var(--accent) 16%, transparent),
+    0 0 56px color-mix(in srgb, var(--accent) 42%, transparent);
+}
+
+.voice-orb.hero.hearing,
+.voice-orb.hero.speaking {
+  box-shadow:
+    0 0 0 18px color-mix(in srgb, var(--accent) 22%, transparent),
+    0 0 72px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.voice-orb.hero svg {
+  width: 56px;
+  height: 56px;
+}
+
+.voice-live-caption {
+  min-height: 3.2em;
+  margin: 0;
+  max-width: 28ch;
+  font-size: 1.15rem;
+  line-height: 1.4;
+  color: var(--ink);
+}
+
+.voice-live .voice-done-btn {
+  flex: none;
+  width: auto;
+  min-width: 140px;
+  padding: 0 22px;
+}
+
+.voice-back-live {
+  align-self: center;
+  margin-top: 8px;
 }
 
 .voice-sheet-controls {
@@ -1553,16 +1630,8 @@ button:focus-visible {
    and loses the fixed bottom tab bar ---------- */
 
 @media (min-width: 681px) {
-  .app-header nav {
-    display: flex;
-  }
-
-  .bottom-nav {
-    display: none;
-  }
-
   .app-shell {
-    padding-bottom: 24px;
+    padding-bottom: calc(var(--nav-height) + 24px);
   }
 }
 

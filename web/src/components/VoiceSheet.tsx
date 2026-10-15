@@ -6,8 +6,6 @@ import { DEFAULT_SILENCE_MS, useConversationMic } from "../hooks/useConversation
 import { useVoiceSession } from "../voice/VoiceSessionContext";
 import { ArrowRightIcon, MicIcon } from "./icons";
 
-const IDLE_CLOSE_MS = 30_000;
-
 interface EasyWin {
   id: string;
   title: string;
@@ -42,8 +40,8 @@ interface Conversation {
 }
 
 /**
- * Pull-up conversation sheet. Voice-first: pause / Done ends a turn;
- * assistant speaks replies aloud (TTS), mic stays muted until done.
+ * Pull-up conversation. Opens on a glowing face. Words show as it talks.
+ * The transcript stays up afterward — swipe or ✕ to leave.
  */
 export function VoiceSheet() {
   const { open, closeSession } = useVoiceSession();
@@ -54,16 +52,57 @@ export function VoiceSheet() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
-  const [lastActivity, setLastActivity] = useState(Date.now());
+  const [face, setFace] = useState<"live" | "thread">("live");
+  const [caption, setCaption] = useState("");
   const scrollerRef = useRef<HTMLDivElement>(null);
   const sendingRef = useRef(false);
+  const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const suppressLiveRef = useRef(false);
   const dragStartY = useRef<number | null>(null);
   const dragYRef = useRef(0);
   const [dragY, setDragY] = useState(0);
   const [draggingSheet, setDraggingSheet] = useState(false);
 
-  const bumpActivity = useCallback(() => setLastActivity(Date.now()), []);
   const { speaking: ttsSpeaking, speak: ttsSpeak, stop: ttsStop } = useAssistantTts(open);
+
+  const clearReveal = useCallback(() => {
+    if (revealTimer.current) {
+      clearTimeout(revealTimer.current);
+      revealTimer.current = null;
+    }
+  }, []);
+
+  const revealSpoken = useCallback(
+    (text: string, durationMs: number | null) => {
+      clearReveal();
+      const words = text.split(/\s+/).filter(Boolean);
+      if (words.length === 0) {
+        setCaption("");
+        return;
+      }
+      const total = durationMs && durationMs > 500 ? durationMs * 0.92 : words.length * 260;
+      const step = total / words.length;
+      let i = 0;
+      setCaption("");
+      const tick = () => {
+        i += 1;
+        setCaption(words.slice(0, i).join(" "));
+        if (i < words.length) revealTimer.current = setTimeout(tick, step);
+      };
+      revealTimer.current = setTimeout(tick, Math.min(step, 90));
+    },
+    [clearReveal],
+  );
+
+  const showThread = useCallback(() => {
+    suppressLiveRef.current = true;
+    clearReveal();
+    setCaption("");
+    setFace("thread");
+    window.setTimeout(() => {
+      suppressLiveRef.current = false;
+    }, 1800);
+  }, [clearReveal]);
 
   const scrollToBottom = useCallback(() => {
     requestAnimationFrame(() => {
@@ -81,7 +120,9 @@ export function VoiceSheet() {
       setError(null);
       setDraft("");
       setPartial("");
-      bumpActivity();
+      setFace("live");
+      setCaption("");
+      clearReveal();
 
       const tempId = `temp-${Date.now()}`;
       setMessages((prev) => [...prev, { id: tempId, role: "user", content: trimmed }]);
@@ -106,7 +147,6 @@ export function VoiceSheet() {
           },
         ]);
         replyText = res.spoken?.trim() || res.message.content;
-        bumpActivity();
       } catch (e) {
         setMessages((prev) => prev.filter((m) => m.id !== tempId));
         setError(e instanceof Error ? e.message : "Something went wrong");
@@ -117,12 +157,12 @@ export function VoiceSheet() {
       }
 
       if (replyText) {
-        bumpActivity();
-        await ttsSpeak(replyText);
-        bumpActivity();
+        const line = replyText;
+        await ttsSpeak(line, { onStart: (ms) => revealSpoken(line, ms) });
+        showThread();
       }
     },
-    [bumpActivity, conversationId, ttsSpeak, ttsStop],
+    [clearReveal, conversationId, revealSpoken, showThread, ttsSpeak, ttsStop],
   );
 
   // Mute while thinking OR while the assistant is talking back.
@@ -134,14 +174,14 @@ export function VoiceSheet() {
       void send(text);
     },
     onPartial: setPartial,
-    onActivity: bumpActivity,
   });
 
   useEffect(() => {
     if (!open) return;
     setLoaded(false);
     setError(null);
-    bumpActivity();
+    setFace("live");
+    setCaption("");
     api
       .get<Conversation>("/assistant/conversation")
       .then((c) => {
@@ -157,18 +197,18 @@ export function VoiceSheet() {
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoaded(true));
-  }, [open, bumpActivity]);
+  }, [open]);
 
   useEffect(() => {
     if (open) scrollToBottom();
   }, [messages, partial, sending, open, scrollToBottom]);
 
   useEffect(() => {
-    if (!open) return;
-    const remaining = IDLE_CLOSE_MS - (Date.now() - lastActivity);
-    const t = setTimeout(() => closeSession(), Math.max(0, remaining));
-    return () => clearTimeout(t);
-  }, [open, lastActivity, closeSession]);
+    if (suppressLiveRef.current) return;
+    if (partial.trim() || mic.phase === "hearing") setFace("live");
+  }, [partial, mic.phase]);
+
+  useEffect(() => () => clearReveal(), [clearReveal]);
 
   useEffect(() => {
     if (!open) return;
@@ -180,21 +220,22 @@ export function VoiceSheet() {
   }, [open, closeSession]);
 
   async function onUndo(undo: NonNullable<ExecutedAction["undo"]>) {
-    bumpActivity();
     try {
       await api.post("/assistant/undo", undo);
       const content = "Undone.";
       setMessages((prev) => [...prev, { id: `undo-${Date.now()}`, role: "assistant", content, actions: null }]);
-      await ttsSpeak(content);
-      bumpActivity();
+      setFace("live");
+      await ttsSpeak(content, { onStart: (ms) => revealSpoken(content, ms) });
+      showThread();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Undo failed");
     }
   }
 
   async function onNewChat() {
-    bumpActivity();
     ttsStop();
+    setFace("live");
+    setCaption("");
     try {
       const c = await api.post<Conversation>("/assistant/conversation/new", {});
       setConversationId(c.id);
@@ -242,9 +283,9 @@ export function VoiceSheet() {
   }
 
   function onDoneTalking() {
-    bumpActivity();
     if (ttsSpeaking) {
       ttsStop();
+      showThread();
       return;
     }
     if (partial.trim()) mic.flushNow();
@@ -269,16 +310,18 @@ export function VoiceSheet() {
   const statusLabel = sending
     ? "Thinking…"
     : ttsSpeaking
-      ? "Speaking…"
+      ? "Talking…"
       : mic.phase === "reconnecting"
         ? "Reconnecting mic…"
         : mic.phase === "hearing"
-          ? "Got it — pause or tap Done when finished"
+          ? "Hearing you"
           : mic.phase === "listening"
-            ? "Listening — take your time"
+            ? "Listening"
             : mic.supported
               ? "Starting mic…"
               : "Type your message";
+
+  const liveLine = ttsSpeaking || caption ? caption : partial;
 
   return (
     <div className="voice-sheet-root" role="dialog" aria-modal="true" aria-label={`Talk to ${branding.assistantName}`}>
@@ -298,7 +341,7 @@ export function VoiceSheet() {
           <div className="voice-sheet-title-row">
             <div>
               <h2>{branding.assistantName}</h2>
-              <p className="voice-sheet-status">{statusLabel}</p>
+              {face === "thread" && <p className="voice-sheet-status">{statusLabel}</p>}
             </div>
             <div className="voice-sheet-actions">
               <button type="button" className="voice-sheet-text-btn" onClick={onNewChat}>
@@ -311,75 +354,69 @@ export function VoiceSheet() {
           </div>
         </header>
 
-        <div className="voice-sheet-thread" ref={scrollerRef}>
-          {!loaded && <p className="muted">Loading…</p>}
-          {loaded && messages.length === 0 && !partial && (
-            <div className="voice-sheet-empty">
-              <div className={`voice-orb ${orbClass}`.trim()} aria-hidden>
-                <MicIcon />
-              </div>
-              <p>Talk when you're ready. I'll listen, then talk back.</p>
+        {face === "live" ? (
+          <div className="voice-live">
+            <div className={`voice-orb hero ${orbClass}`.trim()} aria-hidden>
+              <MicIcon />
             </div>
-          )}
-          {messages.map((m) => {
-            const undoable = m.actions?.filter((a) => a.ok && a.undo) ?? [];
-            return (
-              <div key={m.id} className={`assistant-bubble ${m.role}`}>
-                <div className="assistant-bubble-body">{m.content}</div>
-                {undoable.length > 0 && (
-                  <div className="assistant-undo-row">
-                    {undoable.map((a) => (
-                      <button
-                        key={`${a.undo!.kind}-${a.undo!.taskId}`}
-                        type="button"
-                        className="assistant-undo"
-                        onClick={() => onUndo(a.undo!)}
-                      >
-                        Undo {a.type === "drop" ? "cancel" : a.type}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-          {partial && !busy && (
-            <div className="assistant-bubble user partial">
-              <div className="assistant-bubble-body">{partial}</div>
-            </div>
-          )}
-          {sending && (
-            <div className="assistant-bubble assistant">
-              <div className="assistant-bubble-body muted">Thinking…</div>
-            </div>
-          )}
-        </div>
+            <p className="voice-sheet-status">{statusLabel}</p>
+            <p className="voice-live-caption">{liveLine}</p>
+            {(ttsSpeaking || hasSpeech) && (
+              <button
+                type="button"
+                className="voice-done-btn"
+                onClick={onDoneTalking}
+                disabled={sending && !ttsSpeaking}
+                aria-label={ttsSpeaking ? "Stop speaking" : "Send now"}
+              >
+                {ttsSpeaking ? "Stop" : "Send now"}
+              </button>
+            )}
+            {loaded && messages.length > 0 && !busy && (
+              <button type="button" className="voice-sheet-text-btn" onClick={() => setFace("thread")}>
+                Conversation
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="voice-sheet-thread" ref={scrollerRef}>
+            {!loaded && <p className="muted">Loading…</p>}
+            {loaded && messages.length === 0 && <p className="muted">Nothing said yet.</p>}
+            {messages.map((m) => {
+              const undoable = m.actions?.filter((a) => a.ok && a.undo) ?? [];
+              return (
+                <div key={m.id} className={`assistant-bubble ${m.role}`}>
+                  <div className="assistant-bubble-body">{m.content}</div>
+                  {undoable.length > 0 && (
+                    <div className="assistant-undo-row">
+                      {undoable.map((a) => (
+                        <button
+                          key={`${a.undo!.kind}-${a.undo!.taskId}`}
+                          type="button"
+                          className="assistant-undo"
+                          onClick={() => onUndo(a.undo!)}
+                        >
+                          Undo {a.type === "drop" ? "cancel" : a.type}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            <button type="button" className="voice-sheet-text-btn voice-back-live" onClick={() => setFace("live")}>
+              Back to talking
+            </button>
+          </div>
+        )}
 
         {(error || mic.error) && <p className="assistant-error">{error || mic.error}</p>}
 
-        <div className="voice-sheet-controls">
-          <div className={`voice-orb compact ${orbClass}`.trim()} aria-hidden>
-            <MicIcon />
-          </div>
-          {(ttsSpeaking || hasSpeech) && (
-            <button
-              type="button"
-              className="voice-done-btn"
-              onClick={onDoneTalking}
-              disabled={sending && !ttsSpeaking}
-              aria-label={ttsSpeaking ? "Stop speaking" : "Send now"}
-            >
-              {ttsSpeaking ? "Stop" : "Send now"}
-            </button>
-          )}
-        </div>
-
-        <form className="voice-sheet-composer" onSubmit={onSubmit} onFocus={bumpActivity}>
+        <form className="voice-sheet-composer" onSubmit={onSubmit}>
           <textarea
             rows={1}
             value={draft}
             onChange={(e) => {
-              bumpActivity();
               setDraft(e.target.value);
               e.target.style.height = "auto";
               e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;

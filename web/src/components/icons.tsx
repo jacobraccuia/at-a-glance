@@ -60,6 +60,15 @@ export function PlusIcon() {
   );
 }
 
+export function ProfileIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="8" r="3.2" />
+      <path d="M5 19.2c1.4-2.6 3.8-4 7-4s5.6 1.4 7 4" />
+    </svg>
+  );
+}
+
 export function MicIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

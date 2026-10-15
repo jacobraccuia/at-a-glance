@@ -1,27 +1,18 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { branding } from "../config/branding";
+import { primeTalkAudio } from "../hooks/useAssistantTts";
 import { useVoiceSession } from "../voice/VoiceSessionContext";
-import { MicIcon } from "./icons";
+import { MicIcon, ProfileIcon } from "./icons";
 import { VoiceSheet } from "./VoiceSheet";
 
-// Lists in the tab bar. Center mic opens the conversation sheet over
-// whatever screen you're on — does not navigate away.
+// Today is the day. Talk stays the big center button. All is the other list.
+// Account lives on the profile icon, not in the tab bar.
 const NAV_ITEMS = [
   {
     to: "/",
-    label: "Home",
-    end: true,
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1v-8.5Z" />
-      </svg>
-    ),
-  },
-  {
-    to: "/today",
     label: "Today",
-    end: false,
+    end: true,
     icon: (
       <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="4" />
@@ -39,40 +30,19 @@ const NAV_ITEMS = [
       </svg>
     ),
   },
-  {
-    to: "/account",
-    label: "Account",
-    end: false,
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="3" />
-        <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9c.3.7.9 1.2 1.5 1.3H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" />
-      </svg>
-    ),
-  },
 ] as const;
 
 export function Layout() {
   const { user } = useAuth();
-  const { open, openSession, toggleSession } = useVoiceSession();
-
-  const left = NAV_ITEMS.slice(0, 2);
-  const right = NAV_ITEMS.slice(2);
+  const { open, toggleSession } = useVoiceSession();
 
   return (
     <div className="app-shell">
       <header className="app-header">
         <span className="brand">{branding.appName}</span>
-        <nav>
-          {NAV_ITEMS.map((item) => (
-            <NavLink key={item.to} to={item.to} end={item.end}>
-              {item.label}
-            </NavLink>
-          ))}
-          <button type="button" className="header-talk" onClick={openSession}>
-            Talk
-          </button>
-        </nav>
+        <NavLink to="/account" className="header-profile" aria-label="Account" title="Account">
+          <ProfileIcon />
+        </NavLink>
       </header>
       {user?.isGuest && (
         <div className="guest-banner" role="status">
@@ -83,28 +53,27 @@ export function Layout() {
         <Outlet />
       </main>
       <nav className="bottom-nav">
-        {left.map((item) => (
-          <NavLink key={item.to} to={item.to} end={item.end}>
-            {item.icon}
-            {item.label}
-          </NavLink>
-        ))}
+        <NavLink to={NAV_ITEMS[0].to} end={NAV_ITEMS[0].end}>
+          {NAV_ITEMS[0].icon}
+          {NAV_ITEMS[0].label}
+        </NavLink>
         <button
           type="button"
           className={`bottom-nav-mic${open ? " open" : ""}`}
-          onClick={toggleSession}
+          onClick={() => {
+            primeTalkAudio();
+            toggleSession();
+          }}
           aria-label={open ? "Close conversation" : "Talk to assistant"}
           aria-pressed={open}
         >
           <MicIcon />
           <span>Talk</span>
         </button>
-        {right.map((item) => (
-          <NavLink key={item.to} to={item.to} end={item.end}>
-            {item.icon}
-            {item.label}
-          </NavLink>
-        ))}
+        <NavLink to={NAV_ITEMS[1].to} end={NAV_ITEMS[1].end}>
+          {NAV_ITEMS[1].icon}
+          {NAV_ITEMS[1].label}
+        </NavLink>
       </nav>
       <VoiceSheet />
     </div>
