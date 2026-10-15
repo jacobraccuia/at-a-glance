@@ -10,8 +10,10 @@ Today, a center **Talk** mic, and All. Account is the profile icon.
 Talk opens a glowing face (pause ends the turn, words appear as it
 speaks, then the conversation stays up). Easy Wins sit on Today.
 Guest login for phone testing.
-Web browsers may still suspend the mic when backgrounded; we restart on
-return. See `docs/implementation-plan.md`.
+The same screens are a native iPhone app in `ios/` (SwiftUI). It talks
+to the live API. Safari can still drop the mic in the background; the
+iPhone app uses Apple speech instead.
+See `docs/implementation-plan.md`.
 
 **Live:** https://server-production-1374.up.railway.app
 
@@ -66,15 +68,38 @@ npm run dev   # starts on http://localhost:5173
 Open `http://localhost:5173`, tap **Try as guest** (sample tasks, no account),
 or log in with `demo@example.com` / `password123` / register.
 
+### 4. iPhone app (`ios/`)
+
+Same account as the website. Requires Xcode and an iPhone.
+
+```bash
+open ios/Taskr.xcodeproj
+```
+
+1. In Xcode, select the **Taskr** target → **Signing & Capabilities** → **Team**: your Apple ID. A free personal team works.
+2. Plug the phone in. Tap Trust on the phone.
+3. Pick that phone as the run destination (not a simulator) and press Run.
+4. First launch on the phone: **Settings → General → VPN & Device Management** → trust your developer certificate.
+5. Allow the microphone and speech recognition prompts. Talk needs both.
+
+A free Apple ID certificate lasts about 7 days. Run from Xcode again when the phone says the app is no longer trusted. The bundle id is `app.taskr.ios`. Display name is **Working Title**.
+
+Simulator check (no signing):
+
+```bash
+xcodebuild -project ios/Taskr.xcodeproj -scheme Taskr \
+  -destination 'platform=iOS Simulator,name=iPhone 17' \
+  -sdk iphonesimulator CODE_SIGNING_ALLOWED=NO build
+```
+
 ## Project layout
 
 ```
 CURSOR_MASTER_PROMPT.md   Full product specification
 docs/                      Architecture, data model, plan, integrations, privacy
 server/                    Node + TypeScript + Express + Prisma + Postgres API
-web/                       React + Vite Phase 1 client (will be superseded by
-                           native SwiftUI app in Phase 3; kept for development
-                           and daily use in the meantime)
+web/                       React + Vite client (Safari draft; still the easy desktop path)
+ios/                       Native SwiftUI iPhone app, same API
 docker-compose.yml         Local Postgres for development
 ```
 
