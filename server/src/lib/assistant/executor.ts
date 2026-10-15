@@ -111,12 +111,14 @@ function isRepeating(item: CaptureItem): boolean {
 }
 
 async function attachRecurrence(ctx: ExecContext, taskId: string, item: CaptureItem): Promise<void> {
-  if (!isRepeating(item) || !item.repeat) return;
+  const frequency = item.repeat;
+  if (!frequency || frequency === "none") return;
+  const weekdays = frequency === "weekly" && item.repeatWeekday != null ? [item.repeatWeekday] : [];
   const rule = await ctx.prisma.recurrenceRule.create({
     data: {
-      frequency: item.repeat,
+      frequency,
       interval: 1,
-      byWeekday: item.repeat === "weekly" && item.repeatWeekday != null ? [item.repeatWeekday] : [],
+      byWeekday: weekdays,
       startDate: new Date(`${ctx.todayISO}T00:00:00.000Z`),
     },
   });
@@ -127,9 +129,9 @@ async function attachRecurrence(ctx: ExecContext, taskId: string, item: CaptureI
   const horizonEnd = addDaysToDateString(ctx.todayISO, REPEAT_HORIZON_DAYS);
   const dates = generateOccurrenceDates(
     {
-      frequency: item.repeat,
+      frequency,
       interval: 1,
-      byWeekday: item.repeat === "weekly" && item.repeatWeekday != null ? [item.repeatWeekday] : [],
+      byWeekday: weekdays,
       startDate: ctx.todayISO,
     },
     ctx.todayISO,
