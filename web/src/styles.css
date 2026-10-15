@@ -1205,6 +1205,7 @@ button:focus-visible {
 }
 
 .task-row {
+  position: relative;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -1342,6 +1343,90 @@ button:focus-visible {
 .task-row.done .task-title {
   text-decoration: line-through;
   color: var(--muted);
+}
+
+.task-row.poof {
+  overflow: visible;
+  z-index: 3;
+  pointer-events: none;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.task-row.poof .swipe-row {
+  overflow: hidden;
+  animation: task-vanish 0.78s ease forwards;
+}
+
+.task-row.poof .done-toggle {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+  transition: none;
+  animation: check-pop 0.4s ease;
+}
+
+.task-row.poof .done-toggle svg {
+  opacity: 1;
+}
+
+.done-sparkles {
+  position: absolute;
+  left: 26px;
+  top: 50%;
+  width: 0;
+  height: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.done-sparkles span {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-size: var(--ss);
+  line-height: 1;
+  color: #f4d27a;
+  opacity: 0;
+  animation: spark-fly 0.78s ease-out forwards;
+  animation-delay: var(--sd);
+  filter: drop-shadow(0 0 4px currentColor);
+}
+
+.done-sparkles span:nth-child(3n) {
+  color: var(--accent);
+}
+
+.done-sparkles span:nth-child(3n + 1) {
+  color: #fff6d8;
+}
+
+@keyframes check-pop {
+  0% { transform: scale(0.85); }
+  45% { transform: scale(1.28); }
+  100% { transform: scale(1); }
+}
+
+@keyframes spark-fly {
+  0% { opacity: 0; transform: translate(0, -50%) scale(0.3) rotate(0deg); }
+  22% { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--sx), calc(-50% + var(--sy))) scale(1.15) rotate(20deg); }
+}
+
+@keyframes task-vanish {
+  0% { opacity: 1; transform: translateY(0) scale(1); max-height: 140px; }
+  16% { opacity: 1; transform: translateY(0) scale(1.03); max-height: 140px; }
+  72% { opacity: 0; transform: translateY(-10px) scale(0.96); max-height: 140px; }
+  100% { opacity: 0; transform: translateY(-10px) scale(0.96); max-height: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .task-row.poof,
+  .task-row.poof .done-toggle,
+  .done-sparkles span {
+    animation: none;
+  }
 }
 
 .task-row-main {
