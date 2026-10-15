@@ -57,7 +57,7 @@
 
 html,
 body {
-  height: 100%;
+  min-height: 100%;
 }
 
 body {
@@ -66,7 +66,9 @@ body {
   background-color: var(--bg);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  overflow-x: hidden;
+  /* clip does not turn the page into a second scroller the way hidden does. */
+  overflow-x: clip;
+  overscroll-behavior-x: none;
 }
 
 /* Fixed layer so the sky still paints on iOS, which drops background-attachment: fixed. */
@@ -1088,6 +1090,56 @@ button.voice-orb.hero {
   margin: 8px 0 8px;
 }
 
+.bucket-pager {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 10px;
+}
+
+.bucket-pager-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.bucket-pager-name {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+.bucket-pager-arrow {
+  width: 36px;
+  min-height: 36px;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.bucket-dots {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+.bucket-dot {
+  width: 7px;
+  height: 7px;
+  min-height: unset;
+  padding: 0;
+  border: none;
+  border-radius: 99px;
+  background: var(--border);
+}
+
+.bucket-dot.on {
+  width: 16px;
+  background: var(--accent);
+}
+
 .account-who {
   margin: 0 0 14px;
 }
@@ -1288,7 +1340,7 @@ button.voice-orb.hero {
   position: relative;
   background: var(--surface);
   padding: 8px 10px;
-  touch-action: pan-y;
+  touch-action: manipulation;
   /* Prevent text selection / native drag ghosting while swiping. Inputs are
      explicitly exempted below so the inline rename field still works. */
   -webkit-user-select: none;

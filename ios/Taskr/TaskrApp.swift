@@ -8,8 +8,8 @@ struct TaskrApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(model)
-                .environment(\.palette, model.palette)
-                .tint(model.palette.accent)
+                .environment(\.palette, model.screenPalette)
+                .tint(model.screenPalette.accent)
                 .task { await model.restore() }
         }
     }

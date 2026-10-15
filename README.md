@@ -10,6 +10,9 @@ Today, a center **Talk** mic, and All. Account is the profile icon.
 Talk opens a glowing face (pause ends the turn, words appear as it
 speaks, then the conversation stays up). Easy Wins sit on Today.
 Guest login for phone testing.
+Swipe the task list sideways to move through buckets. All is the start.
+Each bucket colors the screen. The last bucket is remembered.
+A sideways twitch no longer cancels vertical scrolling.
 The same screens are a native iPhone app in `ios/` (SwiftUI). It talks
 to the live API. Safari can still drop the mic in the background; the
 iPhone app uses Apple speech instead.

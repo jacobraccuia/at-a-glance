@@ -13,7 +13,6 @@ struct TaskBoardView: View {
     @State private var winMinutes = 25
     @State private var search = ""
     @State private var statusFilter = ""
-    @State private var bucketFilter = ""
     @State private var filtersOpen = false
     @State private var draft = ""
     @State private var error: String?
@@ -42,10 +41,13 @@ struct TaskBoardView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 chipRow
+                    .gesture(bucketDrag)
+                bucketPager
                 if view == .today && !wins.isEmpty {
                     easyWins
                 }
                 capture
+                    .gesture(bucketDrag)
                 if filtersOpen { filters }
                 if let error {
                     Text(error).font(.footnote).foregroundStyle(palette.danger)
@@ -79,12 +81,89 @@ struct TaskBoardView: View {
             .padding(.bottom, 24)
         }
         .task(id: loadKey) { await reload() }
+        .onChange(of: model.bucketSpot) { _, _ in syncTint() }
         .sheet(item: $detail) { task in
             TaskDetailSheet(task: task) { await reload() }
         }
     }
 
-    private var loadKey: String { "\(view.rawValue)|\(search)|\(statusFilter)|\(bucketFilter)|\(model.boardRevision)" }
+    private var openBuckets: [Bucket] {
+        buckets.filter { $0.archivedAt == nil }.sorted { $0.sortOrder < $1.sortOrder }
+    }
+
+    private var pages: [(id: String, name: String, color: String?)] {
+        [("", "All", nil)] + openBuckets.map { ($0.id, $0.name, $0.color) }
+    }
+
+    private var pageIndex: Int {
+        max(0, pages.firstIndex { $0.id == model.bucketSpot } ?? 0)
+    }
+
+    private var loadKey: String { "\(view.rawValue)|\(search)|\(statusFilter)|\(model.bucketSpot)|\(model.boardRevision)" }
+
+    private var bucketDrag: some Gesture {
+        DragGesture(minimumDistance: 28)
+            .onEnded { value in
+                let dx = value.translation.width
+                let dy = value.translation.height
+                guard abs(dx) > 64, abs(dx) > abs(dy) * 1.4 else { return }
+                shiftSpot(dx < 0 ? 1 : -1)
+            }
+    }
+
+    private func shiftSpot(_ dir: Int) {
+        guard pages.count > 1 else { return }
+        let next = min(pages.count - 1, max(0, pageIndex + dir))
+        guard next != pageIndex else { return }
+        model.bucketSpot = pages[next].id
+        syncTint()
+    }
+
+    private func syncTint() {
+        let open = openBuckets
+        if !model.bucketSpot.isEmpty && !open.contains(where: { $0.id == model.bucketSpot }) {
+            model.bucketSpot = ""
+        }
+        model.bucketTintHex = open.first { $0.id == model.bucketSpot }?.color
+    }
+
+    private var bucketPager: some View {
+        VStack(spacing: 6) {
+            HStack {
+                Button { shiftSpot(-1) } label: {
+                    Image(systemName: "chevron.left")
+                        .frame(width: 36, height: 36)
+                }
+                .disabled(pageIndex <= 0)
+                .accessibilityLabel("Previous bucket")
+                Spacer()
+                Text(pages[pageIndex].name).font(.headline)
+                Spacer()
+                Button { shiftSpot(1) } label: {
+                    Image(systemName: "chevron.right")
+                        .frame(width: 36, height: 36)
+                }
+                .disabled(pageIndex >= pages.count - 1)
+                .accessibilityLabel("Next bucket")
+            }
+            if pages.count > 1 {
+                HStack(spacing: 6) {
+                    ForEach(Array(pages.enumerated()), id: \.offset) { index, page in
+                        Button {
+                            model.bucketSpot = page.id
+                            syncTint()
+                        } label: {
+                            Capsule()
+                                .fill(index == pageIndex ? palette.accent : palette.border)
+                                .frame(width: index == pageIndex ? 16 : 7, height: 7)
+                        }
+                        .accessibilityLabel(page.name)
+                    }
+                }
+            }
+        }
+        .gesture(bucketDrag)
+    }
 
     private var chipRow: some View {
         HStack {
@@ -177,7 +256,7 @@ struct TaskBoardView: View {
                     Text("Dropped").tag("dropped")
                 }
             }
-            Picker("Bucket", selection: $bucketFilter) {
+            Picker("Bucket", selection: $model.bucketSpot) {
                 Text("All buckets").tag("")
                 ForEach(buckets) { bucket in
                     Text(bucket.name).tag(bucket.id)
@@ -192,7 +271,7 @@ struct TaskBoardView: View {
         var query = ["view": view.rawValue]
         if !search.isEmpty { query["search"] = search }
         if view == .all && !statusFilter.isEmpty { query["status"] = statusFilter }
-        if !bucketFilter.isEmpty { query["bucketId"] = bucketFilter }
+        if !model.bucketSpot.isEmpty { query["bucketId"] = model.bucketSpot }
         let qs = query.map { "\($0.key)=\($0.value.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? $0.value)" }.joined(separator: "&")
         do {
             if view == .today || view == .upcoming {
@@ -204,6 +283,7 @@ struct TaskBoardView: View {
                 occurrences = []
             }
             buckets = try await model.api.get("buckets")
+            syncTint()
             if view == .today {
                 let easy: EasyWinsPayload = try await model.api.get("assistant/easy-wins?minutes=25")
                 wins = easy.wins

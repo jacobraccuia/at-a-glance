@@ -16,12 +16,23 @@ final class AppModel: ObservableObject {
     }
     /// Bumps when Talk closes so Today/All reload what the assistant just did.
     @Published var boardRevision = 0
+    /// "" is All. Shared by Today and All, kept across launches.
+    @Published var bucketSpot: String {
+        didSet { UserDefaults.standard.set(bucketSpot, forKey: "taskr.bucket") }
+    }
+    /// Hex from the current bucket. Nil on All.
+    @Published var bucketTintHex: String?
 
     var palette: Palette { Palette.resolve(paletteChoice) }
+    var screenPalette: Palette {
+        guard let hex = bucketTintHex, !bucketSpot.isEmpty else { return palette }
+        return palette.tinted(with: hex)
+    }
 
     init() {
         let raw = UserDefaults.standard.string(forKey: "taskr.palette") ?? "auto"
         paletteChoice = PaletteChoice(rawValue: raw) ?? .auto
+        bucketSpot = UserDefaults.standard.string(forKey: "taskr.bucket") ?? ""
     }
 
     func restore() async {

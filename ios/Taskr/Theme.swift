@@ -81,6 +81,46 @@ struct Palette {
     }
 }
 
+enum BucketColor {
+    static func components(_ hex: String) -> (Double, Double, Double)? {
+        var raw = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+        if raw.hasPrefix("#") { raw.removeFirst() }
+        guard raw.count == 6, let value = Int(raw, radix: 16) else { return nil }
+        return (
+            Double((value >> 16) & 0xFF) / 255,
+            Double((value >> 8) & 0xFF) / 255,
+            Double(value & 0xFF) / 255
+        )
+    }
+
+    static func mix(_ a: (Double, Double, Double), _ b: (Double, Double, Double), towardB: Double) -> Color {
+        Color(
+            red: a.0 + (b.0 - a.0) * towardB,
+            green: a.1 + (b.1 - a.1) * towardB,
+            blue: a.2 + (b.2 - a.2) * towardB
+        )
+    }
+
+    static func readable(_ rgb: (Double, Double, Double)) -> Color {
+        let lum = 0.2126 * rgb.0 + 0.7152 * rgb.1 + 0.0722 * rgb.2
+        if lum > 0.62 { return mix(rgb, (0.12, 0.12, 0.14), towardB: 0.45) }
+        return Color(red: rgb.0, green: rgb.1, blue: rgb.2)
+    }
+}
+
+extension Palette {
+    /// Wash the screen with a bucket color. Light colors get darkened so buttons stay readable.
+    func tinted(with hex: String) -> Palette {
+        guard let rgb = BucketColor.components(hex) else { return self }
+        var copy = self
+        copy.accent = BucketColor.readable(rgb)
+        copy.accentSoft = BucketColor.mix(rgb, (1, 1, 1), towardB: 0.82)
+        copy.bgTop = BucketColor.mix(rgb, (1, 1, 1), towardB: 0.5)
+        copy.bg = BucketColor.mix(rgb, (0.97, 0.97, 0.98), towardB: 0.88)
+        return copy
+    }
+}
+
 private struct PaletteKey: EnvironmentKey {
     static let defaultValue = Palette.clear
 }

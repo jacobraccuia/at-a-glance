@@ -18,7 +18,7 @@ const RIGHT_FAR_THRESHOLD = 168;
 const MAX_DRAG = 220;
 // A touch/mouse move smaller than this (in either axis) doesn't yet commit
 // to being a horizontal swipe vs. a vertical page scroll.
-const AXIS_LOCK_DISTANCE = 8;
+const AXIS_LOCK_DISTANCE = 14;
 
 function stageFor(x: number): SwipeStage {
   if (x <= -LEFT_THRESHOLD) return "left";
@@ -56,7 +56,6 @@ export function useSwipeRow({ onSwipeLeft, onSwipeRightNear, onSwipeRightFar, di
     startX.current = e.clientX;
     startY.current = e.clientY;
     axis.current = "none";
-    setDragging(true);
   }
 
   function onPointerMove(e: ReactPointerEvent) {
@@ -65,10 +64,12 @@ export function useSwipeRow({ onSwipeLeft, onSwipeRightNear, onSwipeRightFar, di
     const dy = e.clientY - startY.current;
     if (axis.current === "none") {
       if (Math.abs(dx) < AXIS_LOCK_DISTANCE && Math.abs(dy) < AXIS_LOCK_DISTANCE) return;
-      axis.current = Math.abs(dx) > Math.abs(dy) ? "horizontal" : "vertical";
+      // Vertical scroll wins unless the move is clearly sideways.
+      axis.current = Math.abs(dx) > Math.abs(dy) * 1.6 ? "horizontal" : "vertical";
     }
     if (axis.current === "vertical") return;
     e.preventDefault();
+    setDragging(true);
     setDragX(Math.max(-MAX_DRAG, Math.min(MAX_DRAG, dx)));
   }
 
