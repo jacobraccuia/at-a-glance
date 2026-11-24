@@ -52,7 +52,7 @@ const AssistantActionSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("list"),
-    scope: z.enum(["today", "upcoming", "later", "all"]),
+    scope: z.enum(["today", "tomorrow", "nextWeek", "later", "all", "upcoming"]),
   }),
   z.object({
     // Correct how long an existing task takes. Do not create a second task.
@@ -178,8 +178,10 @@ export async function parseConversationMessage(
     "  \"would you like me to add that?\". They don't need to say \"add a task\".",
     "  One item per distinct task. Never fabricate a hard deadline;",
     "  use dateKind 'hard' only with explicit deadline language (due/by/deadline).",
-    "  Scheduling: dateKind 'none' = Today (default when no date clues).",
-    "  \"later\" / \"someday\" / \"not today\" / \"backlog\" → dateKind 'soft' with dateDaysFromNow null (inbox).",
+    "  Scheduling: dateKind 'none' = Later. Do not put an undated task on Today.",
+    "  \"today\" / \"this afternoon\" → dateKind 'soft' with dateDaysFromNow 0.",
+    "  \"tomorrow\" → dateKind 'soft' with dateDaysFromNow 1.",
+    "  \"later\" / \"someday\" / \"not today\" / \"backlog\" → dateKind 'soft' with dateDaysFromNow null (Later).",
     "  Named days (Friday, next week) → soft/hard with the weekday offset table.",
     "  Recurrence: \"every Monday\" / \"every day\" / \"every month\" sets repeat to weekly/daily/monthly.",
     "  repeatWeekday is 0=Sunday through 6=Saturday (Monday=1). Otherwise repeat is \"none\" and repeatWeekday is null.",
@@ -189,9 +191,10 @@ export async function parseConversationMessage(
     "  \"the plants take 10 minutes\"). Set minutes (3 hours = 180). Do NOT create a new task for a correction.",
     "- complete / drop / snooze / reopen / add_to_today: set taskQuery to a short phrase from the user's",
     "  words that identifies the task. Prefer clarify if more than one open task could match.",
-    "- list: when they ask what's on today / upcoming / later / everything.",
-    "- easy_wins: when they have a short window (\"I have 25 minutes\", \"what can I knock out quick\",",
-    "  \"easy wins\"). Pass minutes if they named a budget, otherwise null (defaults to 25).",
+    "- list: when they ask what's on today / tomorrow / next week / later / everything.",
+    "  scope is today, tomorrow, nextWeek, later, or all.",
+    "- easy_wins: when they have a short window (\"I have 30 minutes\", \"what can I knock out quick\",",
+    "  \"easy wins\"). Pass minutes if they named a budget, otherwise null (defaults to 30).",
     "  Do NOT invent which tasks are easy -- the server ranks them with transparent rules.",
     "- clarify: ask ONE short question ONLY when something is odd/ambiguous (two possible tasks,",
     "  unclear if they mean complete vs create). NEVER combine clarify with create/complete/drop",
@@ -204,7 +207,8 @@ export async function parseConversationMessage(
     "  no reading a list aloud. Example: \"Added Call Gastro — it's on today.\"",
     "- reply is the written record. It can add a short bullet of what changed.",
     "  spoken and reply must match: if you only ask a question, spoken is that question.",
-    "- New tasks with no date clues are placed on Today. Say that out loud when you add one.",
+    "- New tasks with no date clues go to Later. Say that out loud. If they named today, tomorrow,",
+    "  or a day, name that place instead.",
   ].join("\n");
 
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [

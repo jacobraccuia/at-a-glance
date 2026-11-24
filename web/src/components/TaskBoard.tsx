@@ -1,14 +1,26 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { api } from "../api/client";
 import type { Bucket, Task, TaskOccurrence, TaskStatus, TodayViewResponse } from "../api/types";
-import { applyBucketTint, readBucketSpot, saveBucketSpot } from "../theme/bucketTheme";
+import {
+  applyBucketTint,
+  isWorkBucket,
+  readBucketSpot,
+  readHideWork,
+  readWinMinutes,
+  saveBucketSpot,
+  saveHideWork,
+  saveWinMinutes,
+} from "../theme/bucketTheme";
 import { EasyWinsStrip } from "./EasyWinsStrip";
 import { FilterIcon } from "./icons";
 import { TaskRow } from "./TaskRow";
 import { OccurrenceRow } from "./OccurrenceRow";
 import { QuickCapture } from "./QuickCapture";
 
-export type BoardView = "today" | "upcoming" | "later" | "all";
+export type BoardView = "today" | "tomorrow" | "nextWeek" | "later" | "all";
+export type MoveHorizon = "today" | "tomorrow" | "nextWeek" | "later";
+
+const DATED_VIEWS = new Set<BoardView>(["today", "tomorrow", "nextWeek", "later"]);
 
 interface Props {
   /** Initial view — page can lock one, or user can switch. */
@@ -20,10 +32,19 @@ interface Props {
 
 const VIEW_OPTIONS: { id: BoardView; label: string }[] = [
   { id: "today", label: "Today" },
-  { id: "upcoming", label: "Upcoming" },
+  { id: "tomorrow", label: "Tomorrow" },
+  { id: "nextWeek", label: "Next week" },
   { id: "later", label: "Later" },
   { id: "all", label: "All" },
 ];
+
+const HEADINGS: Record<BoardView, string> = {
+  today: "Today",
+  tomorrow: "Tomorrow",
+  nextWeek: "Next week",
+  later: "Later",
+  all: "All tasks",
+};
 
 export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
   const [view, setView] = useState<BoardView>(initialView);
@@ -33,9 +54,13 @@ export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "">("");
   const [spot, setSpot] = useState(readBucketSpot);
+  const [hideWork, setHideWork] = useState(readHideWork);
+  const [winMinutes, setWinMinutes] = useState(readWinMinutes);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [winsToken, setWinsToken] = useState(0);
+  const [hiddenWinIds, setHiddenWinIds] = useState<string[]>([]);
 
   useEffect(() => {
     setView(initialView);
@@ -43,19 +68,20 @@ export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
 
   const load = useCallback(() => {
     setLoading(true);
+    setWinsToken((n) => n + 1);
     const params = new URLSearchParams({ view });
     if (search) params.set("search", search);
     if (view === "all" && statusFilter) params.set("status", statusFilter);
     if (spot) params.set("bucketId", spot);
+    else if (hideWork) params.set("excludeBucketName", "Work");
 
-    const tasksReq =
-      view === "today" || view === "upcoming"
-        ? api.get<TodayViewResponse>(`/tasks?${params.toString()}`)
-        : api.get<Task[]>(`/tasks?${params.toString()}`);
+    const tasksReq = DATED_VIEWS.has(view)
+      ? api.get<TodayViewResponse>(`/tasks?${params.toString()}`)
+      : api.get<Task[]>(`/tasks?${params.toString()}`);
 
     tasksReq
       .then((body) => {
-        if (view === "today" || view === "upcoming") {
+        if (DATED_VIEWS.has(view)) {
           const tv = body as TodayViewResponse;
           setTasks(tv.tasks);
           setOccurrences(tv.occurrences);
@@ -67,19 +93,20 @@ export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [view, search, statusFilter, spot]);
+  }, [view, search, statusFilter, spot, hideWork]);
 
   useEffect(load, [load]);
   useEffect(() => {
     api.get<Bucket[]>("/buckets").then(setBuckets).catch(() => undefined);
   }, []);
 
+  const openBuckets = buckets
+    .filter((b) => !b.archivedAt)
+    .filter((b) => !(hideWork && isWorkBucket(b.name)))
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
   const pages = [
     { id: "", name: "All", color: null as string | null },
-    ...buckets
-      .filter((b) => !b.archivedAt)
-      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
-      .map((b) => ({ id: b.id, name: b.name, color: b.color })),
+    ...openBuckets.map((b) => ({ id: b.id, name: b.name, color: b.color })),
   ];
   const pageIndex = Math.max(0, pages.findIndex((p) => p.id === spot));
   const page = pages[pageIndex] ?? pages[0];
@@ -106,7 +133,20 @@ export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
 
   useEffect(() => {
     if (spot && buckets.length > 0 && !pages.some((p) => p.id === spot)) chooseSpot("");
-  }, [buckets, spot]);
+  }, [buckets, spot, hideWork]);
+
+  function toggleHideWork() {
+    const next = !hideWork;
+    setHideWork(next);
+    saveHideWork(next);
+    const current = buckets.find((b) => b.id === spot);
+    if (next && current && isWorkBucket(current.name)) chooseSpot("");
+  }
+
+  function chooseMinutes(minutes: number) {
+    setWinMinutes(minutes);
+    saveWinMinutes(minutes);
+  }
 
   useEffect(() => {
     applyBucketTint(page.color);
@@ -163,21 +203,32 @@ export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
     shiftSpot(dx < 0 ? 1 : -1);
   }
 
+  function hideWin(id: string) {
+    setHiddenWinIds((ids) => (ids.includes(id) ? ids : [...ids, id]));
+  }
+  function showWin(id: string) {
+    setHiddenWinIds((ids) => ids.filter((x) => x !== id));
+  }
+
   async function completeTask(t: Task) {
-    await api.post(`/tasks/${t.id}/complete`);
+    await completeId(t.id);
+  }
+  async function completeId(id: string) {
+    hideWin(id);
+    await api.post(`/tasks/${id}/complete`);
     load();
   }
   async function undoTask(t: Task) {
+    showWin(t.id);
     await api.post(`/tasks/${t.id}/undo`);
     load();
   }
-  async function snoozeByDays(t: Task, days: number) {
-    const until = new Date();
-    until.setDate(until.getDate() + days);
-    await api.post(`/tasks/${t.id}/snooze`, { until: until.toISOString() });
+  async function moveHorizon(t: Task, horizon: MoveHorizon) {
+    await api.post(`/tasks/${t.id}/horizon`, { horizon });
     load();
   }
   async function dropTask(t: Task) {
+    hideWin(t.id);
     await api.post(`/tasks/${t.id}/drop`);
     load();
   }
@@ -186,8 +237,7 @@ export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
     load();
   }
   async function addToToday(t: Task) {
-    await api.patch(`/tasks/${t.id}`, { attentionDate: new Date().toISOString(), status: "active" });
-    load();
+    await moveHorizon(t, "today");
   }
 
   const pending = view === "today" ? tasks.filter((t) => t.status === "active") : tasks;
@@ -195,9 +245,7 @@ export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
   const pendingOccurrences = occurrences.filter((o) => o.status === "pending" || view !== "today");
   const completedOccurrences = view === "today" ? occurrences.filter((o) => o.status === "completed") : [];
 
-  const heading =
-    title ??
-    (view === "today" ? "Today" : view === "upcoming" ? "Upcoming" : view === "later" ? "Later" : "All tasks");
+  const heading = title ?? HEADINGS[view];
 
   return (
     <div
@@ -267,11 +315,29 @@ export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
         >
           ›
         </button>
+        <button
+          type="button"
+          className={`view-chip hide-work${hideWork ? " active" : ""}`}
+          aria-pressed={hideWork}
+          onClick={toggleHideWork}
+        >
+          {hideWork ? "Work hidden" : "Hide work"}
+        </button>
       </div>
 
-      {view === "today" && <EasyWinsStrip />}
+      {view === "today" && (
+        <EasyWinsStrip
+          minutes={winMinutes}
+          onMinutes={chooseMinutes}
+          bucketId={spot}
+          hideWork={hideWork}
+          refreshToken={winsToken}
+          hiddenIds={hiddenWinIds}
+          onComplete={(id) => void completeId(id)}
+        />
+      )}
 
-      <QuickCapture onCaptured={load} addToToday />
+      <QuickCapture onCaptured={load} />
 
       {filtersOpen && (
       <div className="filters">
@@ -306,7 +372,7 @@ export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
             task={t}
             onComplete={() => completeTask(t)}
             onUndo={() => undoTask(t)}
-            onSnooze={(days) => snoozeByDays(t, days)}
+            onMove={(horizon) => moveHorizon(t, horizon)}
             onDrop={() => dropTask(t)}
             onRename={(title) => renameTask(t, title)}
             onAddToToday={view === "today" ? undefined : () => addToToday(t)}
@@ -320,10 +386,12 @@ export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
             key={o.id}
             occurrence={o}
             onComplete={async () => {
+              hideWin(o.taskId);
               await api.post(`/tasks/${o.taskId}/occurrences/${o.id}/complete`);
               load();
             }}
             onUndo={async () => {
+              showWin(o.taskId);
               await api.post(`/tasks/${o.taskId}/occurrences/${o.id}/undo`);
               load();
             }}
@@ -346,7 +414,7 @@ export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
                 task={t}
                 onComplete={() => completeTask(t)}
                 onUndo={() => undoTask(t)}
-                onSnooze={(days) => snoozeByDays(t, days)}
+                onMove={(horizon) => moveHorizon(t, horizon)}
                 onDrop={() => dropTask(t)}
                 onRename={(title) => renameTask(t, title)}
                 buckets={buckets}
@@ -358,10 +426,12 @@ export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
                 key={o.id}
                 occurrence={o}
                 onComplete={async () => {
+                  hideWin(o.taskId);
                   await api.post(`/tasks/${o.taskId}/occurrences/${o.id}/complete`);
                   load();
                 }}
                 onUndo={async () => {
+                  showWin(o.taskId);
                   await api.post(`/tasks/${o.taskId}/occurrences/${o.id}/undo`);
                   load();
                 }}

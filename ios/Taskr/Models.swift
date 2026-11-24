@@ -143,14 +143,16 @@ enum ISO8601 {
 }
 
 enum BoardView: String, CaseIterable, Identifiable {
-    case today, upcoming, later, all
+    case today, tomorrow, nextWeek, later, all
     var id: String { rawValue }
     var label: String {
         switch self {
         case .today: return "Today"
-        case .upcoming: return "Upcoming"
+        case .tomorrow: return "Tomorrow"
+        case .nextWeek: return "Next week"
         case .later: return "Later"
         case .all: return "All"
         }
     }
+    var usesHorizonPayload: Bool { self != .all }
 }

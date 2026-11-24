@@ -40,6 +40,7 @@ final class APIClient {
         request.httpMethod = "POST"
         let (data, response) = try await session.data(for: request)
         try check(response, data: data, allowEmpty: true)
+        SessionShare.persist()
     }
 
     func patch<T: Decodable>(_ path: String, body: any Encodable) async throws -> T {
@@ -53,6 +54,7 @@ final class APIClient {
         request.httpBody = try encoder.encode(AnyEncodable(json))
         let (data, response) = try await session.data(for: request)
         try check(response, data: data, allowEmpty: false)
+        SessionShare.persist()
         return data
     }
 
@@ -65,6 +67,7 @@ final class APIClient {
         }
         let (data, response) = try await session.data(for: request)
         try check(response, data: data, allowEmpty: T.self == Empty.self)
+        SessionShare.persist()
         if T.self == Empty.self, data.isEmpty {
             return Empty() as! T
         }

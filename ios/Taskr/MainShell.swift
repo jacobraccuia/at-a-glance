@@ -54,6 +54,19 @@ struct MainShell: View {
             }
         }
         .animation(.spring(duration: 0.28), value: model.talkOpen)
+        .onChange(of: model.link) { _, link in
+            guard let link else { return }
+            switch link {
+            case .today:
+                tab = .today
+            case .talk:
+                model.talkOpen = true
+            case .task(let id):
+                tab = .today
+                model.pendingTaskId = id
+            }
+            model.link = nil
+        }
     }
 
     private var bottomBar: some View {

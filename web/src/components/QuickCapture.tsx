@@ -2,14 +2,20 @@ import { useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { api } from "../api/client";
 import { ArrowRightIcon } from "./icons";
 
-// Fast dump surface on Today -- one or many tasks via text. The real
-// conversational assistant (voice + commands like "cancel that task")
-// lives on Home (/). Keeping this box intentionally simple.
+// Fast dump. No date lands in Later. A named day lands in that horizon.
 const MAX_ROWS = 8;
 
-export function QuickCapture({ onCaptured, addToToday }: { onCaptured: () => void; addToToday?: boolean }) {
+const PLACE: Record<string, string> = {
+  today: "Today",
+  tomorrow: "Tomorrow",
+  nextWeek: "Next week",
+  later: "Later",
+};
+
+export function QuickCapture({ onCaptured }: { onCaptured: () => void }) {
   const [text, setText] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   function autoResize(el: HTMLTextAreaElement) {
@@ -24,9 +30,10 @@ export function QuickCapture({ onCaptured, addToToday }: { onCaptured: () => voi
     if (!trimmed) return;
     setSubmitting(true);
     try {
-      await api.post("/tasks/quick-capture", { text: trimmed, addToToday: addToToday !== false });
+      const created = await api.post<{ title: string; horizon?: string }[]>("/tasks/quick-capture", { text: trimmed });
       setText("");
       if (textareaRef.current) textareaRef.current.style.height = "auto";
+      setNotice(savedNote(created));
       onCaptured();
     } finally {
       setSubmitting(false);
@@ -56,7 +63,7 @@ export function QuickCapture({ onCaptured, addToToday }: { onCaptured: () => voi
           autoResize(e.target);
         }}
         onKeyDown={onKeyDown}
-        placeholder="Add to Today..."
+        placeholder="Add a task..."
         disabled={submitting}
         aria-label="Quick add"
       />
@@ -69,6 +76,14 @@ export function QuickCapture({ onCaptured, addToToday }: { onCaptured: () => voi
       >
         <ArrowRightIcon />
       </button>
+      {notice && <p className="capture-note">{notice}</p>}
     </form>
   );
+}
+
+function savedNote(tasks: { horizon?: string }[]): string {
+  const places = [...new Set(tasks.map((t) => PLACE[t.horizon ?? "later"] ?? "Later"))];
+  if (tasks.length === 1) return `Saved to ${places[0]}.`;
+  if (places.length === 1) return `Saved ${tasks.length} to ${places[0]}.`;
+  return `Saved ${tasks.length}. Each one landed in its own time.`;
 }

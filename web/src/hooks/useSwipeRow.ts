@@ -2,8 +2,8 @@ import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 
 // Mail-style swipe gesture for a task row:
 // - Swipe left past a threshold -> complete the task.
-// - Swipe right a short distance -> snooze to a near default (tomorrow).
-// - Swipe right further past a second threshold -> snooze to a far default
+// - Swipe right a short distance -> Tomorrow.
+// - Swipe right further past a second threshold -> Next week.
 //   (3 days), mirroring Mail's "swipe further for a different action" feel.
 //
 // This is additive, not a replacement: the existing tap-driven action

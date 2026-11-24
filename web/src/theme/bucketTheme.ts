@@ -1,4 +1,44 @@
 const SPOT_KEY = "taskr.bucket";
+const HIDE_WORK_KEY = "taskr.hideWork";
+const WIN_MINUTES_KEY = "taskr.winMinutes";
+
+export function isWorkBucket(name: string): boolean {
+  return name.trim().toLowerCase() === "work";
+}
+
+export function readHideWork(): boolean {
+  try {
+    return localStorage.getItem(HIDE_WORK_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function saveHideWork(hide: boolean): void {
+  try {
+    localStorage.setItem(HIDE_WORK_KEY, hide ? "1" : "0");
+  } catch {
+    /* private mode */
+  }
+}
+
+export function readWinMinutes(): number {
+  try {
+    const raw = Number(localStorage.getItem(WIN_MINUTES_KEY));
+    if (raw === 15 || raw === 30 || raw === 45) return raw;
+  } catch {
+    /* private mode */
+  }
+  return 30;
+}
+
+export function saveWinMinutes(minutes: number): void {
+  try {
+    localStorage.setItem(WIN_MINUTES_KEY, String(minutes));
+  } catch {
+    /* private mode */
+  }
+}
 
 export function readBucketSpot(): string {
   try {

@@ -14,7 +14,7 @@ export interface EasyWin {
   assumedMinutes: number;
 }
 
-export const DEFAULT_EASY_WIN_MINUTES = 25;
+export const DEFAULT_EASY_WIN_MINUTES = 30;
 /** Cold-start assumption when estimateMinutes is null -- conservative short. */
 const UNKNOWN_ESTIMATE_ASSUMPTION = 15;
 

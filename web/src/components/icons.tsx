@@ -9,6 +9,15 @@ export function DetailsIcon() {
   );
 }
 
+export function LaterIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 8h16l-1.2 11.2a1 1 0 0 1-1 .8H6.2a1 1 0 0 1-1-.8L4 8Z" />
+      <path d="M8 8V6a4 4 0 0 1 8 0v2" />
+    </svg>
+  );
+}
+
 export function SnoozeIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

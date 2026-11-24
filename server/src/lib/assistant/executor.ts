@@ -8,6 +8,7 @@ import { generateOccurrenceDates } from "../recurrence.js";
 import { addDaysToDateString, startOfDayInTimeZone } from "../timezone.js";
 import type { AssistantAction, AssistantPlan, CaptureItem } from "./conversationParser.js";
 import { DEFAULT_EASY_WIN_MINUTES, formatEasyWinsSummary, rankEasyWins, type EasyWin } from "./easyWins.js";
+import { classifyTask, horizonLabel, horizonWindows, type HorizonName } from "../horizons.js";
 
 export interface ExecutedAction {
   type: string;
@@ -44,6 +45,27 @@ export function toSpokenLine(written: string, spoken?: string | null): string {
   return (first ?? written).replace(/\s+/g, " ").trim().slice(0, 180);
 }
 
+function spokenForCapture(title: string, item: CaptureItem): string {
+  if (item.repeat && item.repeat !== "none") return `Added ${title}.`;
+  if (item.dateDaysFromNow === 0 && item.dateKind !== "none") return `Added ${title}. It's on today.`;
+  if (item.dateDaysFromNow === 1) return `Added ${title}. It's on tomorrow.`;
+  if (item.dateDaysFromNow != null && item.dateKind !== "none") {
+    return item.dateDaysFromNow > 14 ? `Added ${title}. It's in Later.` : `Added ${title}. It's in Next week.`;
+  }
+  return `Added ${title}. It's in Later.`;
+}
+
+function placementOf(data: Record<string, unknown>, ctx: ExecContext): HorizonName {
+  const windows = horizonWindows(ctx.todayISO, ctx.tz, ctx.weekStartsOn ?? 0);
+  return classifyTask(
+    {
+      attentionDate: (data.attentionDate as Date | undefined) ?? null,
+      hardDeadline: (data.hardDeadline as Date | undefined) ?? null,
+    },
+    windows
+  );
+}
+
 interface ExecContext {
   prisma: PrismaClient;
   userId: string;
@@ -51,6 +73,7 @@ interface ExecContext {
   tz: string;
   buckets: { id: string; name: string }[];
   addToTodayDefault: boolean;
+  weekStartsOn?: number;
 }
 
 function normalize(s: string): string {
@@ -148,8 +171,12 @@ async function attachRecurrence(ctx: ExecContext, taskId: string, item: CaptureI
 
 function buildCreateData(ctx: ExecContext, item: CaptureItem): Record<string, unknown> {
   // Inbox / Later pile: soft date with no day offset (user said later/someday).
-  const parkInbox = item.dateKind === "soft" && item.dateDaysFromNow == null;
-  // Repeating tasks show up on their days, not as an extra one-off Today row.
+  // No date, or an explicit "later"/"someday", parks in Later.
+  // Repeating tasks show up on their days, not as an extra one-off row.
+  const parkInbox =
+    !isRepeating(item) &&
+    ((item.dateKind === "soft" && item.dateDaysFromNow == null) ||
+      (item.dateKind === "none" && !ctx.addToTodayDefault));
   const forceToday = !isRepeating(item) && ctx.addToTodayDefault && item.dateKind === "none" && !parkInbox;
 
   const data: Record<string, unknown> = {
@@ -215,9 +242,9 @@ export function sanitizeAssistantPlan(plan: AssistantPlan): AssistantPlan {
     // They already chose to act — strip permission-seeking wording.
     const creates = plan.actions.filter((a) => a.type === "create_tasks");
     if (creates.length === 1 && creates[0].type === "create_tasks" && creates[0].items.length === 1) {
-      const title = creates[0].items[0].cleanTitle;
-      const line = `Added ${title}. It's on today.`;
-      return { ...plan, reply: `Got it — added "${title}".`, spoken: line };
+      const item = creates[0].items[0];
+      const line = spokenForCapture(item.cleanTitle, item);
+      return { ...plan, reply: `Got it — added "${item.cleanTitle}".`, spoken: line };
     }
     return { ...plan, reply: "Got it.", spoken: "Got it." };
   }
@@ -234,24 +261,25 @@ async function runAction(action: AssistantAction, ctx: ExecContext, openTasks: T
       return [{ type: "clarify", ok: true, summary: action.question }];
 
     case "list": {
+      const windows = horizonWindows(ctx.todayISO, ctx.tz, ctx.weekStartsOn ?? 0);
+      const now = Date.now();
+      const visible = openTasks.filter(
+        (t) =>
+          (t.status === "captured" || t.status === "active") &&
+          !t.recurrenceRuleId &&
+          !(t.snoozedUntil && t.snoozedUntil.getTime() > now)
+      );
       let filtered: Task[];
-      if (action.scope === "today") {
-        const todayStart = startOfDayInTimeZone(ctx.todayISO, ctx.tz);
-        const tomorrow = addDaysToDateString(ctx.todayISO, 1);
-        const todayEnd = startOfDayInTimeZone(tomorrow, ctx.tz);
-        filtered = openTasks.filter(
-          (t) =>
-            t.status === "active" &&
-            t.attentionDate &&
-            t.attentionDate >= todayStart &&
-            t.attentionDate < todayEnd
-        );
+      if (action.scope === "all") {
+        filtered = visible;
       } else if (action.scope === "upcoming") {
-        filtered = openTasks.filter((t) => t.status === "active" && t.attentionDate);
-      } else if (action.scope === "later") {
-        filtered = openTasks.filter((t) => t.status === "captured" || (t.status === "active" && !t.attentionDate));
+        filtered = visible.filter((t) => {
+          const place = classifyTask(t, windows);
+          return place === "tomorrow" || place === "nextWeek";
+        });
       } else {
-        filtered = openTasks.filter((t) => t.status === "captured" || t.status === "active");
+        const scope = action.scope as HorizonName;
+        filtered = visible.filter((t) => classifyTask(t, windows) === scope);
       }
       const titles = filtered.slice(0, 12).map((t) => t.title);
       const summary =
@@ -287,7 +315,7 @@ async function runAction(action: AssistantAction, ctx: ExecContext, openTasks: T
           type: "created",
           payload: { via: "assistant", repeat: item.repeat ?? "none" },
         });
-        const onToday = Boolean((data as { attentionDate?: Date }).attentionDate) && !isRepeating(item);
+        const place = placementOf(data, ctx);
         const weekdayName = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
         const repeatLabel =
           item.repeat === "daily"
@@ -302,9 +330,7 @@ async function runAction(action: AssistantAction, ctx: ExecContext, openTasks: T
           ok: true,
           summary: repeatLabel
             ? `Added "${task.title}" ${repeatLabel}`
-            : onToday
-              ? `Added "${task.title}" to Today`
-              : `Added "${task.title}"`,
+            : `Added "${task.title}" to ${horizonLabel(place)}`,
           taskId: task.id,
           taskTitle: task.title,
         });
@@ -603,7 +629,8 @@ export function fallbackPlanFromText(text: string): AssistantPlan {
   }));
   const reply =
     items.length === 1 ? `Got it — added "${items[0].cleanTitle}".` : `Got it — added ${items.length} things.`;
-  const spoken = items.length === 1 ? `Added ${items[0].cleanTitle}. It's on today.` : `Added ${items.length} things to today.`;
+  const spoken =
+    items.length === 1 ? `Added ${items[0].cleanTitle}. It's in Later.` : `Added ${items.length} things to Later.`;
   return {
     reply,
     spoken,

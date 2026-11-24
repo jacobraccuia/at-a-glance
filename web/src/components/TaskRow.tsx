@@ -4,13 +4,13 @@ import { useCelebrate } from "../hooks/useCelebrate";
 import { useSwipeRow } from "../hooks/useSwipeRow";
 import { DoneSparkles } from "./DoneSparkles";
 import { TaskEditPanel } from "./TaskEditPanel";
-import { CheckIcon, DetailsIcon, DropIcon, PlusIcon, SnoozeIcon } from "./icons";
+import { CheckIcon, DetailsIcon, DropIcon, LaterIcon, PlusIcon, SnoozeIcon } from "./icons";
 
 interface Props {
   task: Task;
   onComplete: () => void;
   onUndo: () => void;
-  onSnooze: (days: number) => void;
+  onMove: (horizon: "today" | "tomorrow" | "nextWeek" | "later") => void;
   onDrop: () => void;
   onRename: (newTitle: string) => void;
   onAddToToday?: () => void;
@@ -35,7 +35,7 @@ export function TaskRow({
   task,
   onComplete,
   onUndo,
-  onSnooze,
+  onMove,
   onDrop,
   onRename,
   onAddToToday,
@@ -49,15 +49,14 @@ export function TaskRow({
   const [detailsOpen, setDetailsOpen] = useState(startDetailsOpen);
   const { poof, celebrate } = useCelebrate(onComplete);
 
-  // Swipe left to complete, swipe right (near/far) to snooze to a near
-  // (tomorrow) or far (3 days) default -- see useSwipeRow for thresholds.
+  // Swipe left to complete. Swipe right a little for Tomorrow, further for Next week.
   // Disabled once a task is already done, and while renaming inline, so a
   // drag inside the title-edit input doesn't fight with text selection.
   const { dragX, dragging, stage, handlers } = useSwipeRow({
     disabled: isDone || editing || poof,
     onSwipeLeft: celebrate,
-    onSwipeRightNear: () => onSnooze(1),
-    onSwipeRightFar: () => onSnooze(3),
+    onSwipeRightNear: () => onMove("tomorrow"),
+    onSwipeRightFar: () => onMove("nextWeek"),
   });
 
   function commitRename() {
@@ -88,7 +87,7 @@ export function TaskRow({
               }`}
             >
               <SnoozeIcon />
-              <span>{stage === "right-far" ? "3 days" : "Tomorrow"}</span>
+              <span>{stage === "right-far" ? "Next week" : "Tomorrow"}</span>
             </div>
             <div className={`swipe-bg-side swipe-bg-right swipe-action-complete${stage === "left" ? " armed" : ""}`}>
               <CheckIcon />
@@ -163,8 +162,11 @@ export function TaskRow({
                     <DetailsIcon />
                   </button>
                 )}
-                <button className="icon-button" onClick={() => onSnooze(1)} title="Snooze until tomorrow" aria-label="Snooze until tomorrow">
+                <button className="icon-button" onClick={() => onMove("tomorrow")} title="Tomorrow" aria-label="Move to tomorrow">
                   <SnoozeIcon />
+                </button>
+                <button className="icon-button" onClick={() => onMove("later")} title="Later" aria-label="Move to later">
+                  <LaterIcon />
                 </button>
                 <button className="icon-button danger" onClick={onDrop} title="Drop this task" aria-label="Drop this task">
                   <DropIcon />

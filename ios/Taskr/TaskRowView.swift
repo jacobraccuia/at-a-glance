@@ -6,6 +6,7 @@ struct TaskRowView: View {
     let task: TaskItem
     var showAdd: Bool
     var onChange: () async -> Void
+    var onClear: () -> Void = {}
     var onOpen: () -> Void
 
     @State private var poof = false
@@ -33,7 +34,7 @@ struct TaskRowView: View {
         HStack {
             if dragX > 12 {
                 Image(systemName: "clock")
-                Text(swipeStage == "far" ? "3 days" : "Tomorrow")
+                Text(swipeStage == "far" ? "Next week" : "Tomorrow")
                     .font(.caption.weight(.semibold))
                 Spacer()
             }
@@ -63,8 +64,8 @@ struct TaskRowView: View {
                 dragX = 0
                 guard task.status != .completed else { return }
                 if x <= -76 { Task { await toggle() } }
-                else if x >= 168 { Task { await snooze(days: 3) } }
-                else if x >= 76 { Task { await snooze(days: 1) } }
+                else if x >= 168 { Task { await move("nextWeek") } }
+                else if x >= 76 { Task { await move("tomorrow") } }
             }
     }
 
@@ -96,11 +97,12 @@ struct TaskRowView: View {
 
             if task.status != .completed {
                 if showAdd && task.recurrenceRuleId == nil && !ISO8601.isToday(task.attentionDate) {
-                    icon("plus") { Task { await addToday() } }
+                    icon("plus", label: "Today") { Task { await addToday() } }
                 }
-                icon("pencil") { onOpen() }
-                icon("clock") { Task { await snooze(days: 1) } }
-                icon("trash") { Task { await drop() } }
+                icon("pencil", label: "Edit") { onOpen() }
+                icon("clock", label: "Tomorrow") { Task { await move("tomorrow") } }
+                icon("tray", label: "Later") { Task { await move("later") } }
+                icon("trash", label: "Drop") { Task { await drop() } }
             }
         }
         .padding(10)
@@ -137,13 +139,14 @@ struct TaskRowView: View {
             .clipShape(Capsule())
     }
 
-    private func icon(_ name: String, action: @escaping () -> Void) -> some View {
+    private func icon(_ name: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: name)
                 .font(.caption)
                 .frame(width: 28, height: 28)
                 .foregroundStyle(name == "trash" ? palette.danger : palette.muted)
         }
+        .accessibilityLabel(label)
     }
 
     private func toggle() async {
@@ -153,28 +156,36 @@ struct TaskRowView: View {
             return
         }
         poof = true
+        onClear()
         try? await Task.sleep(nanoseconds: 520_000_000)
-        try? await model.api.postVoid("tasks/\(task.id)/complete")
+        do {
+            try await model.api.postVoid("tasks/\(task.id)/complete")
+            await TaskActivity.stop(taskId: task.id)
+        } catch {}
         await onChange()
     }
 
-    private func snooze(days: Int = 1) async {
-        let until = Calendar.current.date(byAdding: .day, value: days, to: Date()) ?? Date()
-        struct Body: Encodable { let until: String }
-        try? await model.api.postVoid("tasks/\(task.id)/snooze", body: Body(until: ISO8601.string(until)))
+    private func move(_ horizon: String) async {
+        struct Body: Encodable { let horizon: String }
+        onClear()
+        do {
+            try await model.api.postVoid("tasks/\(task.id)/horizon", body: Body(horizon: horizon))
+            await TaskActivity.stop(taskId: task.id)
+        } catch {}
         await onChange()
     }
 
     private func drop() async {
-        try? await model.api.postVoid("tasks/\(task.id)/drop")
+        onClear()
+        do {
+            try await model.api.postVoid("tasks/\(task.id)/drop")
+            await TaskActivity.stop(taskId: task.id)
+        } catch {}
         await onChange()
     }
 
     private func addToday() async {
-        struct Body: Encodable { let attentionDate: String; let status: String }
-        let body = Body(attentionDate: ISO8601.string(Date()), status: "active")
-        let _: TaskItem? = try? await model.api.patch("tasks/\(task.id)", body: body)
-        await onChange()
+        await move("today")
     }
 }
 
@@ -183,6 +194,7 @@ struct OccurrenceRowView: View {
     @Environment(\.palette) private var palette
     let occurrence: TaskOccurrence
     var onChange: () async -> Void
+    var onClear: () -> Void = {}
     @State private var poof = false
 
     var body: some View {
@@ -211,8 +223,12 @@ struct OccurrenceRowView: View {
             try? await model.api.postVoid("tasks/\(occurrence.taskId)/occurrences/\(occurrence.id)/undo")
         } else {
             poof = true
+            onClear()
             try? await Task.sleep(nanoseconds: 420_000_000)
-            try? await model.api.postVoid("tasks/\(occurrence.taskId)/occurrences/\(occurrence.id)/complete")
+            do {
+                try await model.api.postVoid("tasks/\(occurrence.taskId)/occurrences/\(occurrence.id)/complete")
+                await TaskActivity.stop(taskId: occurrence.taskId)
+            } catch {}
         }
         await onChange()
     }

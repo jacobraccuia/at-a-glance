@@ -1036,6 +1036,34 @@ button.voice-orb.hero {
   font-weight: 600;
 }
 
+.easy-win-budgets {
+  display: flex;
+  gap: 4px;
+}
+
+.easy-win-check {
+  display: flex;
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+.easy-win-check svg {
+  width: 18px;
+  height: 18px;
+}
+
+.capture-note {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.hide-work {
+  margin-left: 4px;
+}
+
 .easy-wins-list {
   list-style: none;
   padding: 0;
@@ -1092,6 +1120,7 @@ button.voice-orb.hero {
 
 .bucket-pager {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   margin: 2px 0 10px;

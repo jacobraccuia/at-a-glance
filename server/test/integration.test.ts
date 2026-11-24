@@ -116,10 +116,16 @@ describe("Phase 1 core flows", () => {
     const res = await agent.post("/api/tasks/quick-capture").send({ text: "drop off the package this week" });
     expect(res.status).toBe(201);
     expect(res.body).toHaveLength(1);
-    expect(res.body[0].status).toBe("active");
-    expect(res.body[0].attentionDate).toBeTruthy();
+    expect(res.body[0].status).toBe("captured");
+    expect(res.body[0].attentionDate).toBeNull();
+    expect(res.body[0].horizon).toBe("later");
     expect(res.body[0].hardDeadline).toBeNull();
     expect(res.body[0].title).toBe("drop off the package this week");
+
+    const later = await agent.get("/api/tasks?view=later");
+    expect(later.body.tasks.find((t: { id: string }) => t.id === res.body[0].id)).toBeTruthy();
+    const today = await agent.get("/api/tasks?view=today");
+    expect(today.body.tasks.find((t: { id: string }) => t.id === res.body[0].id)).toBeFalsy();
   });
 
   it("quick-capture with addToToday makes the task show up in the Today view", async () => {
@@ -150,8 +156,9 @@ describe("Phase 1 core flows", () => {
     // No AI involved -- none of these should be fabricated/assisted.
     for (const task of res.body) {
       expect(task.origin).toBe("manual");
-      expect(task.status).toBe("active");
-      expect(task.attentionDate).toBeTruthy();
+      expect(task.status).toBe("captured");
+      expect(task.attentionDate).toBeNull();
+      expect(task.horizon).toBe("later");
     }
   });
 
@@ -288,6 +295,9 @@ describe("Phase 1 core flows", () => {
       expect(res.body[1].deadlineSource).toBe("inferred");
       expect(res.body[2].estimateMinutes).toBe(20);
       expect(res.body[2].hardDeadline).toBeNull();
+      expect(res.body[0].status).toBe("captured");
+      expect(res.body[0].horizon).toBe("later");
+      expect(res.body[2].horizon).toBe("later");
     } finally {
       spy.mockRestore();
     }
@@ -368,6 +378,72 @@ describe("Phase 1 core flows", () => {
     expect(res.body.executed[0].type).toBe("create_tasks");
     expect(res.body.executed[0].ok).toBe(true);
     expect(res.body.executed[0].taskTitle).toBe("water the fern");
+  });
+
+  it("keeps every open task in today, tomorrow, next week, or later", async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const shift = (days: number) => {
+      const [y, m, d] = today.split("-").map(Number);
+      const date = new Date(Date.UTC(y, m - 1, d));
+      date.setUTCDate(date.getUTCDate() + days);
+      return `${date.toISOString().slice(0, 10)}T12:00:00.000Z`;
+    };
+    const make = async (title: string, attentionDate: string) => {
+      const res = await agent.post("/api/tasks").send({ title, status: "active", attentionDate });
+      expect(res.status).toBe(201);
+      return res.body.id as string;
+    };
+    const past = await make("Past errand", shift(-2));
+    const tomorrow = await make("Tomorrow errand", shift(1));
+    const soon = await make("Soon errand", shift(3));
+    const far = await make("Far errand", shift(40));
+
+    const todayView = await agent.get("/api/tasks?view=today");
+    expect(todayView.body.tasks.find((t: { id: string }) => t.id === past)).toBeFalsy();
+
+    const tomorrowView = await agent.get("/api/tasks?view=tomorrow");
+    expect(tomorrowView.body.tasks.find((t: { id: string }) => t.id === tomorrow)).toBeTruthy();
+
+    const nextWeek = await agent.get("/api/tasks?view=nextWeek");
+    expect(nextWeek.body.tasks.find((t: { id: string }) => t.id === soon)).toBeTruthy();
+    expect(nextWeek.body.tasks.find((t: { id: string }) => t.id === far)).toBeFalsy();
+
+    const later = await agent.get("/api/tasks?view=later");
+    expect(later.body.tasks.find((t: { id: string }) => t.id === past)).toBeTruthy();
+    expect(later.body.tasks.find((t: { id: string }) => t.id === far)).toBeTruthy();
+
+    const moved = await agent.post(`/api/tasks/${past}/horizon`).send({ horizon: "tomorrow" });
+    expect(moved.status).toBe(200);
+    expect(moved.body.horizon).toBe("tomorrow");
+  });
+
+  it("hides a Work bucket from lists and easy wins", async () => {
+    const work = await agent.post("/api/buckets").send({ name: "Work", color: "#4062BB" });
+    expect(work.status).toBe(201);
+    const workTask = await agent.post("/api/tasks").send({
+      title: "Finish the deck",
+      status: "active",
+      bucketId: work.body.id,
+      estimateMinutes: 10,
+    });
+    const homeTask = await agent.post("/api/tasks").send({
+      title: "Buy paper towels",
+      status: "captured",
+      estimateMinutes: 5,
+    });
+
+    const all = await agent.get("/api/tasks?view=all&excludeBucketName=Work");
+    expect(all.body.find((t: { id: string }) => t.id === workTask.body.id)).toBeFalsy();
+    expect(all.body.find((t: { id: string }) => t.id === homeTask.body.id)).toBeTruthy();
+
+    const wins = await agent.get("/api/assistant/easy-wins?minutes=30&excludeBucketName=Work");
+    expect(wins.status).toBe(200);
+    expect(wins.body.wins.find((w: { id: string }) => w.id === workTask.body.id)).toBeFalsy();
+    expect(wins.body.wins.find((w: { id: string }) => w.id === homeTask.body.id)).toBeTruthy();
+
+    const onlyWork = await agent.get(`/api/assistant/easy-wins?minutes=30&bucketId=${work.body.id}`);
+    expect(onlyWork.body.wins.find((w: { id: string }) => w.id === workTask.body.id)).toBeTruthy();
+    expect(onlyWork.body.wins.find((w: { id: string }) => w.id === homeTask.body.id)).toBeFalsy();
   });
 
   it("rejects unauthenticated access", async () => {

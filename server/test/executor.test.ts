@@ -110,14 +110,14 @@ describe("sanitizeAssistantPlan", () => {
     });
     expect(plan.actions).toHaveLength(1);
     expect(plan.reply).toBe('Got it — added "Call Gastro".');
-    expect(plan.spoken).toBe("Added Call Gastro. It's on today.");
+    expect(plan.spoken).toBe("Added Call Gastro. It's in Later.");
   });
 });
 
 describe("toSpokenLine", () => {
   it("speaks the short line and skips the bullet record", () => {
-    expect(toSpokenLine('Got it.\n\n• Added "Call Gastro" to Today', "Added Call Gastro. It's on today.")).toBe(
-      "Added Call Gastro. It's on today.",
+    expect(toSpokenLine('Got it.\n\n• Added "Call Gastro" to Later', "Added Call Gastro. It's in Later.")).toBe(
+      "Added Call Gastro. It's in Later.",
     );
   });
 

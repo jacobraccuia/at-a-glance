@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 
 @MainActor
 final class AppModel: ObservableObject {
@@ -20,8 +21,19 @@ final class AppModel: ObservableObject {
     @Published var bucketSpot: String {
         didSet { UserDefaults.standard.set(bucketSpot, forKey: "taskr.bucket") }
     }
+    /// Weekend switch. Hides the bucket named Work. Remembered.
+    @Published var hideWork: Bool {
+        didSet { UserDefaults.standard.set(hideWork, forKey: "taskr.hideWork") }
+    }
+    /// Easy-win session length. 15, 30, or 45.
+    @Published var winMinutes: Int {
+        didSet { UserDefaults.standard.set(winMinutes, forKey: "taskr.winMinutes") }
+    }
     /// Hex from the current bucket. Nil on All.
     @Published var bucketTintHex: String?
+    /// Set by a widget tap or the morning note. The shell consumes it.
+    @Published var link: AppLink?
+    @Published var pendingTaskId: String?
 
     var palette: Palette { Palette.resolve(paletteChoice) }
     var screenPalette: Palette {
@@ -33,6 +45,9 @@ final class AppModel: ObservableObject {
         let raw = UserDefaults.standard.string(forKey: "taskr.palette") ?? "auto"
         paletteChoice = PaletteChoice(rawValue: raw) ?? .auto
         bucketSpot = UserDefaults.standard.string(forKey: "taskr.bucket") ?? ""
+        hideWork = UserDefaults.standard.bool(forKey: "taskr.hideWork")
+        let storedMinutes = UserDefaults.standard.object(forKey: "taskr.winMinutes") as? Int
+        winMinutes = storedMinutes == 15 || storedMinutes == 45 ? storedMinutes! : 30
     }
 
     func restore() async {
@@ -65,7 +80,37 @@ final class AppModel: ObservableObject {
     func logout() async {
         try? await api.discard("auth/logout")
         HTTPCookieStorage.shared.cookies?.forEach { HTTPCookieStorage.shared.deleteCookie($0) }
+        SessionShare.clear()
         user = nil
         talkOpen = false
     }
+
+    func open(_ url: URL) {
+        guard url.scheme == "taskr" else { return }
+        switch url.host {
+        case "talk":
+            link = .talk
+        case "task":
+            let id = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            link = id.isEmpty ? .today : .task(id)
+        default:
+            link = .today
+        }
+    }
+
+    var accentHex: String {
+        let palette = screenPalette.accent
+        let ui = UIColor(palette)
+        var r: CGFloat = 0
+        var g: CGFloat = 0
+        var b: CGFloat = 0
+        ui.getRed(&r, green: &g, blue: &b, alpha: nil)
+        return String(format: "#%02X%02X%02X", Int(r * 255), Int(g * 255), Int(b * 255))
+    }
+}
+
+enum AppLink: Equatable {
+    case today
+    case talk
+    case task(String)
 }

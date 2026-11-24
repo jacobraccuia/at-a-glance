@@ -4,13 +4,16 @@ import { prisma } from "../db/client.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { logTaskEvent } from "../lib/taskEvents.js";
 import {
+  endOfDayInTimeZone,
   getCurrentDateInTimeZone,
   getUpcomingWeekdayOffsets,
   getWeekdayName,
+  startOfDayInTimeZone,
 } from "../lib/timezone.js";
 import { parseConversationMessage } from "../lib/assistant/conversationParser.js";
 import { executeAssistantPlan, fallbackPlanFromText } from "../lib/assistant/executor.js";
 import { DEFAULT_EASY_WIN_MINUTES, rankEasyWins } from "../lib/assistant/easyWins.js";
+import { bucketIdsByName } from "../lib/bucketFilter.js";
 import { synthesizeSpeech } from "../lib/assistant/tts.js";
 
 export const assistantRouter = Router();
@@ -125,8 +128,9 @@ assistantRouter.post("/message", async (req, res) => {
     todayISO,
     tz,
     buckets,
-    // Spoken / typed creates with no date clues land on Today.
-    addToTodayDefault: true,
+    // Spoken / typed creates with no date clues land in Later.
+    addToTodayDefault: false,
+    weekStartsOn: (await prisma.userPreferences.findUnique({ where: { userId } }))?.weekStartsOn ?? 0,
   });
 
   const assistantMsg = await prisma.assistantMessage.create({
@@ -183,11 +187,34 @@ assistantRouter.get("/easy-wins", async (req, res) => {
   const userId = req.session.userId!;
   const raw = typeof req.query.minutes === "string" ? parseInt(req.query.minutes, 10) : DEFAULT_EASY_WIN_MINUTES;
   const minutes = Number.isFinite(raw) ? Math.max(1, Math.min(240, raw)) : DEFAULT_EASY_WIN_MINUTES;
-  const openTasks = await prisma.task.findMany({
-    where: { userId, status: { in: ["captured", "active"] } },
-    orderBy: { updatedAt: "desc" },
-    take: 80,
+  const bucketId = typeof req.query.bucketId === "string" ? req.query.bucketId : "";
+  const excludeName = typeof req.query.excludeBucketName === "string" ? req.query.excludeBucketName : "";
+  const taskWhere: Record<string, unknown> = { userId, status: { in: ["captured", "active"] } };
+  if (bucketId) taskWhere.bucketId = bucketId;
+  else if (excludeName) {
+    const hidden = await bucketIdsByName(prisma, userId, excludeName);
+    if (hidden.length > 0) {
+      taskWhere.AND = [{ OR: [{ bucketId: null }, { bucketId: { notIn: hidden } }] }];
+    }
+  }
+  const tz = await getUserTimezone(userId);
+  const today = getCurrentDateInTimeZone(tz);
+  const doneToday = await prisma.taskOccurrence.findMany({
+    where: {
+      status: "completed",
+      occurrenceDate: { gte: startOfDayInTimeZone(today, tz), lte: endOfDayInTimeZone(today, tz) },
+      task: { userId },
+    },
+    select: { taskId: true },
   });
+  const doneIds = new Set(doneToday.map((row) => row.taskId));
+  const openTasks = (
+    await prisma.task.findMany({
+      where: taskWhere,
+      orderBy: { updatedAt: "desc" },
+      take: 80,
+    })
+  ).filter((task) => !doneIds.has(task.id));
   res.json({ minutes, wins: rankEasyWins(openTasks, minutes) });
 });
 

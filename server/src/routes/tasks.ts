@@ -6,22 +6,32 @@ import { logTaskEvent } from "../lib/taskEvents.js";
 import { generateOccurrenceDates } from "../lib/recurrence.js";
 import {
   addDaysToDateString,
-  endOfDayInTimeZone,
   getCurrentDateInTimeZone,
   getUpcomingWeekdayOffsets,
   getWeekdayName,
   startOfDayInTimeZone,
 } from "../lib/timezone.js";
 import { parseMultiCaptureText, type CaptureIntent } from "../lib/assistant/intentParser.js";
+import { bucketIdsByName } from "../lib/bucketFilter.js";
+import {
+  attentionInstant,
+  classifyDateString,
+  classifyTask,
+  horizonWindows,
+  type HorizonName,
+} from "../lib/horizons.js";
 
 export const tasksRouter = Router();
 tasksRouter.use(requireAuth);
 
 const OCCURRENCE_HORIZON_DAYS = 90;
 
-async function getUserTimezone(userId: string): Promise<string> {
+async function getUserClock(userId: string): Promise<{ tz: string; weekStartsOn: number }> {
   const prefs = await prisma.userPreferences.findUnique({ where: { userId } });
-  return prefs?.timezone ?? "UTC";
+  return {
+    tz: prefs?.timezone ?? "UTC",
+    weekStartsOn: prefs?.weekStartsOn ?? 0,
+  };
 }
 
 async function materializeOccurrences(taskId: string, recurrenceRuleId: string) {
@@ -190,8 +200,8 @@ interface QuickCaptureTaskData {
 }
 
 // Builds the create() payload for a single captured item. AI dates are
-// always "inferred". No date clue → Today when addToToday is on. A named
-// day or deadline wins over that default.
+// always "inferred". No date clue → Later. addToToday is the explicit
+// override onto Today. A named day or deadline wins over that override.
 function buildQuickCaptureData(
   userId: string,
   rawText: string,
@@ -249,7 +259,8 @@ tasksRouter.post("/quick-capture", async (req, res) => {
   }
   const userId = req.session.userId!;
   const text = parsed.data.text.trim();
-  const tz = await getUserTimezone(userId);
+  const clock = await getUserClock(userId);
+  const tz = clock.tz;
   const todayISO = getCurrentDateInTimeZone(tz);
   const todayWeekday = getWeekdayName(todayISO);
 
@@ -285,8 +296,8 @@ tasksRouter.post("/quick-capture", async (req, res) => {
 
   const createdTasks = [];
   for (let i = 0; i < rawItems.length; i++) {
-    // Default on: a bare capture lands on Today unless the caller passes false.
-    const addToToday = parsed.data.addToToday !== false;
+    // Default off: a bare capture lands in Later unless the caller opts into Today.
+    const addToToday = parsed.data.addToToday === true;
     const data = buildQuickCaptureData(userId, rawItems[i], intents[i], addToToday, todayISO, tz, buckets);
     const task = await prisma.task.create({ data });
     await logTaskEvent(prisma, {
@@ -298,23 +309,33 @@ tasksRouter.post("/quick-capture", async (req, res) => {
     createdTasks.push(task);
   }
 
-  res.status(201).json(createdTasks);
+  const windows = horizonWindows(todayISO, tz, clock.weekStartsOn);
+  res.status(201).json(createdTasks.map((task) => ({ ...task, horizon: classifyTask(task, windows) })));
 });
 
 // ---------- List / views ----------
 
 tasksRouter.get("/", async (req, res) => {
   const userId = req.session.userId!;
-  const view = (req.query.view as string) ?? "all";
+  const requested = (req.query.view as string) ?? "all";
+  const view = requested === "upcoming" ? "nextWeek" : requested;
   const bucketId = req.query.bucketId as string | undefined;
   const search = req.query.search as string | undefined;
   const statusFilter = req.query.status as string | undefined;
+  const excludeName = typeof req.query.excludeBucketName === "string" ? req.query.excludeBucketName : "";
 
-  const tz = await getUserTimezone(userId);
-  const today = getCurrentDateInTimeZone(tz);
+  const clock = await getUserClock(userId);
+  const today = getCurrentDateInTimeZone(clock.tz);
+  const windows = horizonWindows(today, clock.tz, clock.weekStartsOn);
 
   const baseWhere: Record<string, unknown> = { userId };
   if (bucketId) baseWhere.bucketId = bucketId;
+  else if (excludeName) {
+    const hidden = await bucketIdsByName(prisma, userId, excludeName);
+    if (hidden.length > 0) {
+      baseWhere.AND = [{ OR: [{ bucketId: null }, { bucketId: { notIn: hidden } }] }];
+    }
+  }
   if (search) baseWhere.title = { contains: search, mode: "insensitive" };
 
   if (view === "captured") {
@@ -326,77 +347,68 @@ tasksRouter.get("/", async (req, res) => {
     return res.json(tasks);
   }
 
-  if (view === "today" || view === "upcoming") {
-    const rangeStartStr = view === "today" ? today : addDaysToDateString(today, 1);
-    const rangeEndStr = view === "today" ? today : addDaysToDateString(today, 7);
-    const rangeStart = startOfDayInTimeZone(rangeStartStr, tz);
-    const rangeEnd = endOfDayInTimeZone(rangeEndStr, tz);
-
-    // Non-recurring (or recurring-template-not-relevant) tasks due by date window.
-    const directTasks = await prisma.task.findMany({
+  if (view === "today" || view === "tomorrow" || view === "nextWeek" || view === "later") {
+    const horizon = view as HorizonName;
+    const now = new Date();
+    const bucketAnd = Array.isArray(baseWhere.AND) ? (baseWhere.AND as object[]) : [];
+    const openTasks = await prisma.task.findMany({
       where: {
         ...baseWhere,
-        status: "active",
+        status: { in: ["captured", "active"] },
         recurrenceRuleId: null,
-        OR: [
-          { attentionDate: { lte: rangeEnd } },
-          { hardDeadline: { lte: rangeEnd } },
-        ],
-        AND: [
-          {
-            OR: [
-              { snoozedUntil: null },
-              { snoozedUntil: { lte: new Date() } },
-            ],
-          },
-        ],
+        AND: [...bucketAnd, { OR: [{ snoozedUntil: null }, { snoozedUntil: { lte: now } }] }],
       },
       include: { bucket: true },
-      orderBy: [{ hardDeadline: "asc" }, { attentionDate: "asc" }],
     });
+    const placed = openTasks
+      .filter((task) => classifyTask(task, windows) === horizon)
+      .sort((a, b) => {
+        if (horizon === "later") return b.createdAt.getTime() - a.createdAt.getTime();
+        const aTime = (a.attentionDate ?? a.hardDeadline)?.getTime() ?? 0;
+        const bTime = (b.attentionDate ?? b.hardDeadline)?.getTime() ?? 0;
+        return aTime - bTime;
+      });
 
-    // Today keeps a small done pile so a sparkle-away task can still be undone.
     const completedToday =
-      view === "today"
+      horizon === "today"
         ? await prisma.task.findMany({
             where: {
               ...baseWhere,
               status: "completed",
               recurrenceRuleId: null,
-              completedAt: { gte: rangeStart, lte: rangeEnd },
+              completedAt: { gte: windows.todayStart, lte: windows.todayEnd },
             },
             include: { bucket: true },
             orderBy: { completedAt: "desc" },
           })
         : [];
 
-    // Recurring tasks: occurrences whose date falls in the window.
-    const occurrences = await prisma.taskOccurrence.findMany({
+    const pendingOccurrences = await prisma.taskOccurrence.findMany({
       where: {
-        occurrenceDate: { gte: rangeStart, lte: rangeEnd },
+        status: "pending",
         task: { ...baseWhere, status: "active", recurrenceRuleId: { not: null } },
       },
       include: { task: { include: { bucket: true } } },
       orderBy: { occurrenceDate: "asc" },
     });
-
-    return res.json({ tasks: [...directTasks, ...completedToday], occurrences });
-  }
-
-  // "later" = captured inbox or active with no attention date (not on Today).
-  if (view === "later") {
-    const tasks = await prisma.task.findMany({
-      where: {
-        ...baseWhere,
-        status: { in: ["captured", "active"] },
-        attentionDate: null,
-        hardDeadline: null,
-        recurrenceRuleId: null,
-      },
-      orderBy: { createdAt: "desc" },
-      include: { bucket: true },
+    const completedOccurrences =
+      horizon === "today"
+        ? await prisma.taskOccurrence.findMany({
+            where: {
+              status: "completed",
+              occurrenceDate: { gte: windows.todayStart, lte: windows.todayEnd },
+              task: { ...baseWhere, status: "active", recurrenceRuleId: { not: null } },
+            },
+            include: { task: { include: { bucket: true } } },
+            orderBy: { occurrenceDate: "asc" },
+          })
+        : [];
+    const occurrences = [...pendingOccurrences, ...completedOccurrences].filter((occurrence) => {
+      const day = occurrence.occurrenceDate.toISOString().slice(0, 10);
+      return classifyDateString(day, windows) === horizon;
     });
-    return res.json(tasks);
+
+    return res.json({ tasks: [...placed, ...completedToday], occurrences });
   }
 
   // "all"
@@ -486,6 +498,34 @@ tasksRouter.post("/:id/undo", async (req, res) => {
   });
   await logTaskEvent(prisma, { taskId: task.id, userId, type: "uncompleted" });
   res.json(updated);
+});
+
+const horizonSchema = z.object({
+  horizon: z.enum(["today", "tomorrow", "nextWeek", "later"]),
+});
+tasksRouter.post("/:id/horizon", async (req, res) => {
+  const parsed = horizonSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const userId = req.session.userId!;
+  const task = await prisma.task.findFirst({ where: { id: req.params.id, userId } });
+  if (!task) return res.status(404).json({ error: "Task not found" });
+  const clock = await getUserClock(userId);
+  const windows = horizonWindows(getCurrentDateInTimeZone(clock.tz), clock.tz, clock.weekStartsOn);
+  const horizon = parsed.data.horizon;
+  const updated = await prisma.task.update({
+    where: { id: task.id },
+    data:
+      horizon === "later"
+        ? { status: task.hardDeadline ? "active" : "captured", attentionDate: null, snoozedUntil: null }
+        : { status: "active", attentionDate: attentionInstant(horizon, windows), snoozedUntil: null },
+  });
+  await logTaskEvent(prisma, {
+    taskId: task.id,
+    userId,
+    type: "updated",
+    payload: { horizon },
+  });
+  res.json({ ...updated, horizon: classifyTask(updated, windows) });
 });
 
 const snoozeSchema = z.object({ until: z.string().datetime() });

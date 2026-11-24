@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import UserNotifications
 
 struct AccountView: View {
     @EnvironmentObject private var model: AppModel
@@ -8,6 +9,8 @@ struct AccountView: View {
     @State private var newName = ""
     @State private var newColor = Color(red: 0.30, green: 0.62, blue: 0.44)
     @State private var error: String?
+    @State private var nudgeDenied = false
+    @State private var nudgeTime = MorningNudge.timeDate
 
     var body: some View {
         List {
@@ -50,6 +53,25 @@ struct AccountView: View {
                 }
             }
 
+            Section("Morning") {
+                Toggle("One nudge", isOn: Binding(
+                    get: { MorningNudge.enabled },
+                    set: { on in
+                        MorningNudge.enabled = on
+                        Task { await applyNudge(on) }
+                    }
+                ))
+                DatePicker("Time", selection: $nudgeTime, displayedComponents: .hourAndMinute)
+                Text("One note if Today has something. Quiet if the day is empty, or if you already opened the app. The widget stays either way.")
+                    .font(.footnote)
+                    .foregroundStyle(palette.muted)
+                if nudgeDenied {
+                    Text("Notifications are off in Settings.")
+                        .font(.footnote)
+                        .foregroundStyle(palette.danger)
+                }
+            }
+
             if let error {
                 Text(error).foregroundStyle(palette.danger).font(.footnote)
             }
@@ -62,10 +84,24 @@ struct AccountView: View {
         }
         .navigationTitle("Account")
         .task { await load() }
+        .onChange(of: nudgeTime) { _, date in
+            MorningNudge.minutesFromMidnight = MorningNudge.minutes(from: date)
+            Task { await TodayGlance.refresh(api: model.api, accentHex: model.accentHex) }
+        }
     }
 
     private func load() async {
         buckets = (try? await model.api.get("buckets?includeArchived=true")) ?? []
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        nudgeDenied = settings.authorizationStatus == .denied
+    }
+
+    private func applyNudge(_ on: Bool) async {
+        if on {
+            let ok = await MorningNudge.requestPermission()
+            nudgeDenied = !ok
+        }
+        await TodayGlance.refresh(api: model.api, accentHex: model.accentHex)
     }
 
     private func createBucket() async {

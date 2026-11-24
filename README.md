@@ -9,6 +9,9 @@ and privacy documentation.
 Today, a center **Talk** mic, and All. Account is the profile icon.
 Talk opens a glowing face (pause ends the turn, words appear as it
 speaks, then the conversation stays up). Easy Wins sit on Today.
+A capture with no date goes to **Later**. The time chips are Today,
+Tomorrow, Next week, and Later. Easy Wins can be 15, 30, or 45 minutes.
+**Hide work** drops the Work bucket until you turn it back on.
 Guest login for phone testing.
 Swipe the task list sideways to move through buckets. All is the start.
 Each bucket colors the screen. The last bucket is remembered.
@@ -84,6 +87,9 @@ open ios/Taskr.xcodeproj
 3. Pick that phone as the run destination (not a simulator) and press Run.
 4. First launch on the phone: **Settings → General → VPN & Device Management** → trust your developer certificate.
 5. Allow the microphone and speech recognition prompts. Talk needs both.
+6. Allow notifications if you want the morning nudge. Account sets the time. It stays quiet when Today is empty, or when the app is already open.
+7. Add the **Today** widget from the home screen or the lock screen. It shows how many are left and the easiest one. It updates when you open the app, and on its own about every half hour.
+8. Start a task from its details, or tap **Start that one** on the morning note. That task stays on the Lock Screen until you tap Done or Stop. It does not stay up all day, and it does not start by itself in the morning.
 
 A free Apple ID certificate lasts about 7 days. Run from Xcode again when the phone says the app is no longer trusted. The bundle id is `app.taskr.ios`. Display name is **Working Title**.
 

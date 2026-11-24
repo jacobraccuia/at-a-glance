@@ -85,8 +85,8 @@ describe("rankEasyWins", () => {
   });
 
   it("defaults budget to DEFAULT_EASY_WIN_MINUTES", () => {
-    expect(DEFAULT_EASY_WIN_MINUTES).toBe(25);
-    const wins = rankEasyWins([fakeTask("Fits", { estimateMinutes: 25 })]);
+    expect(DEFAULT_EASY_WIN_MINUTES).toBe(30);
+    const wins = rankEasyWins([fakeTask("Fits", { estimateMinutes: 30 })]);
     expect(wins).toHaveLength(1);
   });
 });
