@@ -1060,8 +1060,16 @@ button.voice-orb.hero {
   font-size: 0.82rem;
 }
 
+.bucket-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 2px 0 10px;
+}
+
 .hide-work {
-  margin-left: 4px;
+  margin-left: 0;
 }
 
 .easy-wins-list {
@@ -1101,8 +1109,29 @@ button.voice-orb.hero {
   gap: 8px;
 }
 
-.board-title-row h1 {
+.board-title-row h1,
+.brand-mark {
   margin: 0;
+  font-weight: 700;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.list-switches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.brand-mark {
+  font-size: 1.25rem;
+  letter-spacing: -0.01em;
+}
+
+.board-title-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .filter-toggle svg {
@@ -1120,10 +1149,10 @@ button.voice-orb.hero {
 
 .bucket-pager {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  margin: 2px 0 10px;
+  width: 100%;
+  margin: 0;
 }
 
 .bucket-pager-main {
@@ -1526,9 +1555,24 @@ button.voice-orb.hero {
 }
 
 .task-title {
-  cursor: text;
+  cursor: pointer;
   font-size: 0.98rem;
   word-break: break-word;
+  background: none;
+  border: none;
+  padding: 0;
+  min-height: unset;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  width: auto;
+}
+
+button.task-title:hover,
+button.task-title:active {
+  border-color: transparent;
+  background: none;
+  transform: none;
 }
 
 .task-title-edit {
@@ -1715,6 +1759,18 @@ button.voice-orb.hero {
   padding-top: 12px;
   border-top: 1px solid var(--border);
   flex-basis: 100%;
+}
+
+.effort-field {
+  border: none;
+  margin: 0;
+  padding: 0;
+}
+
+.effort-choices {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
 }
 
 .task-details-fields {

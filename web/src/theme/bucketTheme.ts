@@ -1,5 +1,6 @@
 const SPOT_KEY = "taskr.bucket";
 const HIDE_WORK_KEY = "taskr.hideWork";
+const HIDE_FINISHED_KEY = "taskr.hideFinished";
 const WIN_MINUTES_KEY = "taskr.winMinutes";
 
 export function isWorkBucket(name: string): boolean {
@@ -17,6 +18,22 @@ export function readHideWork(): boolean {
 export function saveHideWork(hide: boolean): void {
   try {
     localStorage.setItem(HIDE_WORK_KEY, hide ? "1" : "0");
+  } catch {
+    /* private mode */
+  }
+}
+
+export function readHideFinished(): boolean {
+  try {
+    return localStorage.getItem(HIDE_FINISHED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function saveHideFinished(hide: boolean): void {
+  try {
+    localStorage.setItem(HIDE_FINISHED_KEY, hide ? "1" : "0");
   } catch {
     /* private mode */
   }

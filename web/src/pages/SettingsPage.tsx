@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import { branding } from "../config/branding";
 import { PalettePicker } from "../components/PalettePicker";
 import { useAuth } from "../auth/AuthContext";
 import { BucketsPage } from "./BucketsPage";
@@ -15,6 +16,7 @@ export function SettingsPage() {
 
   return (
     <div className="page settings-page">
+      <p className="brand-mark">{branding.appName}</p>
       <h1>Account</h1>
       <p className="muted small account-who">{user?.isGuest ? "Guest" : user?.displayName}</p>
       <PalettePicker />

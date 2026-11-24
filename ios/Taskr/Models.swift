@@ -25,6 +25,17 @@ enum Importance: String, Codable, CaseIterable {
     case low, medium, high
 }
 
+enum Effort: String, Codable, CaseIterable {
+    case low, medium, high
+    var label: String {
+        switch self {
+        case .low: return "Low"
+        case .medium: return "Medium"
+        case .high: return "High"
+        }
+    }
+}
+
 struct TaskItem: Codable, Identifiable {
     let id: String
     var title: String
@@ -36,10 +47,12 @@ struct TaskItem: Codable, Identifiable {
     var hardDeadline: String?
     var estimateMinutes: Int?
     var importance: Importance
+    var effort: Effort?
     var waitingOn: String?
     var recurrenceRuleId: String?
     var snoozedUntil: String?
     var completedAt: String?
+    var createdAt: String?
 }
 
 enum OccurrenceStatus: String, Codable {
@@ -51,6 +64,8 @@ struct TaskOccurrence: Codable, Identifiable {
     let taskId: String
     let occurrenceDate: String
     var status: OccurrenceStatus
+    var completedAt: String?
+    var createdAt: String?
     var task: TaskItem?
 }
 
@@ -139,6 +154,19 @@ enum ISO8601 {
     static func isToday(_ raw: String?) -> Bool {
         guard let raw, let parsed = date(raw) else { return false }
         return Calendar.current.isDateInToday(parsed)
+    }
+
+    /// Calendar time from add to check-off. Nil when either stamp is missing.
+    static func doneIn(from start: String?, to end: String?) -> String? {
+        guard let start, let end, let a = date(start), let b = date(end) else { return nil }
+        let minutes = Int(b.timeIntervalSince(a) / 60)
+        guard minutes >= 0 else { return nil }
+        if minutes < 1 { return "Done in under a minute" }
+        if minutes < 60 { return minutes == 1 ? "Done in 1 minute" : "Done in \(minutes) minutes" }
+        let hours = minutes / 60
+        if hours < 24 { return hours == 1 ? "Done in 1 hour" : "Done in \(hours) hours" }
+        let days = hours / 24
+        return days == 1 ? "Done in 1 day" : "Done in \(days) days"
     }
 }
 

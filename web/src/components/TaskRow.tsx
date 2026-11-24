@@ -1,10 +1,11 @@
 import { useState } from "react";
 import type { Bucket, Task } from "../api/types";
+import { doneIn } from "../lib/doneIn";
 import { useCelebrate } from "../hooks/useCelebrate";
 import { useSwipeRow } from "../hooks/useSwipeRow";
 import { DoneSparkles } from "./DoneSparkles";
 import { TaskEditPanel } from "./TaskEditPanel";
-import { CheckIcon, DetailsIcon, DropIcon, LaterIcon, PlusIcon, SnoozeIcon } from "./icons";
+import { CheckIcon, DropIcon, LaterIcon, SnoozeIcon } from "./icons";
 
 interface Props {
   task: Task;
@@ -12,7 +13,6 @@ interface Props {
   onUndo: () => void;
   onMove: (horizon: "today" | "tomorrow" | "nextWeek" | "later") => void;
   onDrop: () => void;
-  onRename: (newTitle: string) => void;
   onAddToToday?: () => void;
   buckets?: Bucket[];
   onDetailsSaved?: () => void;
@@ -37,37 +37,30 @@ export function TaskRow({
   onUndo,
   onMove,
   onDrop,
-  onRename,
   onAddToToday,
   buckets,
   onDetailsSaved,
   startDetailsOpen = false,
 }: Props) {
   const isDone = task.status === "completed";
-  const [editing, setEditing] = useState(false);
-  const [draftTitle, setDraftTitle] = useState(task.title);
+  const span = isDone ? doneIn(task.createdAt, task.completedAt) : null;
   const [detailsOpen, setDetailsOpen] = useState(startDetailsOpen);
   const { poof, celebrate } = useCelebrate(onComplete);
 
   // Swipe left to complete. Swipe right a little for Tomorrow, further for Next week.
   // Disabled once a task is already done, and while renaming inline, so a
   // drag inside the title-edit input doesn't fight with text selection.
+  const canToday = Boolean(onAddToToday);
   const { dragX, dragging, stage, handlers } = useSwipeRow({
-    disabled: isDone || editing || poof,
+    disabled: isDone || poof,
+    zones: canToday ? 3 : 2,
     onSwipeLeft: celebrate,
-    onSwipeRightNear: () => onMove("tomorrow"),
+    onSwipeRightNear: canToday ? onAddToToday : () => onMove("tomorrow"),
+    onSwipeRightMid: canToday ? () => onMove("tomorrow") : undefined,
     onSwipeRightFar: () => onMove("nextWeek"),
   });
-
-  function commitRename() {
-    setEditing(false);
-    const trimmed = draftTitle.trim();
-    if (trimmed && trimmed !== task.title) {
-      onRename(trimmed);
-    } else {
-      setDraftTitle(task.title);
-    }
-  }
+  const rightLabel =
+    stage === "right-far" ? "Next week" : stage === "right-mid" ? "Tomorrow" : canToday ? "Today" : "Tomorrow";
 
   return (
     <li className={`task-row${isDone ? " done" : ""}${poof ? " poof" : ""}`}>
@@ -83,11 +76,11 @@ export function TaskRow({
           <div className="swipe-bg">
             <div
               className={`swipe-bg-side swipe-bg-left swipe-action-snooze${
-                stage === "right-near" ? " armed" : stage === "right-far" ? " armed far" : ""
+                stage === "right-near" || stage === "right-mid" ? " armed" : stage === "right-far" ? " armed far" : ""
               }`}
             >
               <SnoozeIcon />
-              <span>{stage === "right-far" ? "Next week" : "Tomorrow"}</span>
+              <span>{rightLabel}</span>
             </div>
             <div className={`swipe-bg-side swipe-bg-right swipe-action-complete${stage === "left" ? " armed" : ""}`}>
               <CheckIcon />
@@ -114,54 +107,26 @@ export function TaskRow({
               <CheckIcon />
             </button>
             <div className="task-row-main">
-              {editing ? (
-                <input
-                  className="task-title-edit"
-                  value={draftTitle}
-                  autoFocus
-                  onChange={(e) => setDraftTitle(e.target.value)}
-                  onBlur={commitRename}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") commitRename();
-                    if (e.key === "Escape") {
-                      setDraftTitle(task.title);
-                      setEditing(false);
-                    }
-                  }}
-                />
-              ) : (
-                <span className="task-title" onDoubleClick={() => setEditing(true)} title="Double-click to rename">
-                  {task.title}
-                </span>
-              )}
+              <button type="button" className="task-title" onClick={() => buckets && setDetailsOpen((open) => !open)}>
+                {task.title}
+              </button>
               <div className="task-meta">
                 {task.bucket && <span className="pill" style={{ borderColor: task.bucket.color ?? undefined }}>{task.bucket.name}</span>}
                 {task.hardDeadline && (
                   <span className="pill deadline">Due {new Date(task.hardDeadline).toLocaleDateString()}</span>
                 )}
                 {task.importance === "high" && <span className="pill importance-high">Important</span>}
+                {task.effort === "low" && <span className="pill">Low effort</span>}
+                {task.effort === "medium" && <span className="pill">Medium effort</span>}
+                {task.effort === "high" && <span className="pill">High effort</span>}
                 {task.waitingOn && <span className="pill waiting">Waiting: {task.waitingOn}</span>}
                 {task.estimateMinutes != null && <span className="pill">~{task.estimateMinutes}m</span>}
+                {span && <span className="pill">{span}</span>}
                 {task.notes && <span className="pill">Has notes</span>}
               </div>
             </div>
             {!isDone && (
               <div className="task-actions">
-                {onAddToToday && !task.recurrenceRuleId && !isAttentionDateToday(task.attentionDate) && (
-                  <button className="icon-button add-today" onClick={onAddToToday} title="Add to Today" aria-label="Add to Today">
-                    <PlusIcon />
-                  </button>
-                )}
-                {buckets && (
-                  <button
-                    className={`icon-button${detailsOpen ? " active" : ""}`}
-                    onClick={() => setDetailsOpen((o) => !o)}
-                    title={detailsOpen ? "Close details" : "Edit details"}
-                    aria-label="Edit details"
-                  >
-                    <DetailsIcon />
-                  </button>
-                )}
                 <button className="icon-button" onClick={() => onMove("tomorrow")} title="Tomorrow" aria-label="Move to tomorrow">
                   <SnoozeIcon />
                 </button>

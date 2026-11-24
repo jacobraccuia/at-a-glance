@@ -21,6 +21,7 @@ function fakeTask(title: string, overrides: Partial<Task> = {}): Task {
     estimateConfidence: null,
     actualMinutes: null,
     importance: "medium",
+    effort: null,
     waitingOn: null,
     recurrenceRuleId: null,
     snoozedUntil: null,

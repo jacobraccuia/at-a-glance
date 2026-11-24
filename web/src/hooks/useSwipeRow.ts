@@ -10,18 +10,27 @@ import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 // buttons keep working exactly as before for anyone who doesn't swipe
 // (mouse users, accessibility, discoverability).
 
-export type SwipeStage = "none" | "left" | "right-near" | "right-far";
+export type SwipeStage = "none" | "left" | "right-near" | "right-mid" | "right-far";
 
 const LEFT_THRESHOLD = 76;
 const RIGHT_NEAR_THRESHOLD = 76;
 const RIGHT_FAR_THRESHOLD = 168;
+const RIGHT_MID_THRESHOLD = 150;
+const RIGHT_FAR_3_THRESHOLD = 230;
 const MAX_DRAG = 220;
+const MAX_DRAG_3 = 300;
 // A touch/mouse move smaller than this (in either axis) doesn't yet commit
 // to being a horizontal swipe vs. a vertical page scroll.
 const AXIS_LOCK_DISTANCE = 14;
 
-function stageFor(x: number): SwipeStage {
+function stageFor(x: number, zones: 2 | 3): SwipeStage {
   if (x <= -LEFT_THRESHOLD) return "left";
+  if (zones === 3) {
+    if (x >= RIGHT_FAR_3_THRESHOLD) return "right-far";
+    if (x >= RIGHT_MID_THRESHOLD) return "right-mid";
+    if (x >= RIGHT_NEAR_THRESHOLD) return "right-near";
+    return "none";
+  }
   if (x >= RIGHT_FAR_THRESHOLD) return "right-far";
   if (x >= RIGHT_NEAR_THRESHOLD) return "right-near";
   return "none";
@@ -30,11 +39,21 @@ function stageFor(x: number): SwipeStage {
 interface Options {
   onSwipeLeft?: () => void;
   onSwipeRightNear?: () => void;
+  onSwipeRightMid?: () => void;
   onSwipeRightFar?: () => void;
+  /** 3 zones when a short swipe can mean Today. */
+  zones?: 2 | 3;
   disabled?: boolean;
 }
 
-export function useSwipeRow({ onSwipeLeft, onSwipeRightNear, onSwipeRightFar, disabled }: Options) {
+export function useSwipeRow({
+  onSwipeLeft,
+  onSwipeRightNear,
+  onSwipeRightMid,
+  onSwipeRightFar,
+  zones = 2,
+  disabled,
+}: Options) {
   const [dragX, setDragX] = useState(0);
   const [dragging, setDragging] = useState(false);
   const pointerId = useRef<number | null>(null);
@@ -70,15 +89,17 @@ export function useSwipeRow({ onSwipeLeft, onSwipeRightNear, onSwipeRightFar, di
     if (axis.current === "vertical") return;
     e.preventDefault();
     setDragging(true);
-    setDragX(Math.max(-MAX_DRAG, Math.min(MAX_DRAG, dx)));
+    const limit = zones === 3 ? MAX_DRAG_3 : MAX_DRAG;
+    setDragX(Math.max(-limit, Math.min(limit, dx)));
   }
 
   function onPointerUp(e: ReactPointerEvent) {
     if (pointerId.current !== e.pointerId) return;
-    const finalStage = stageFor(dragX);
+    const finalStage = stageFor(dragX, zones);
     reset();
     if (finalStage === "left") onSwipeLeft?.();
     else if (finalStage === "right-far") onSwipeRightFar?.();
+    else if (finalStage === "right-mid") onSwipeRightMid?.();
     else if (finalStage === "right-near") onSwipeRightNear?.();
   }
 
@@ -90,7 +111,7 @@ export function useSwipeRow({ onSwipeLeft, onSwipeRightNear, onSwipeRightFar, di
   return {
     dragX,
     dragging,
-    stage: stageFor(dragX),
+    stage: stageFor(dragX, zones),
     handlers: { onPointerDown, onPointerMove, onPointerUp, onPointerCancel },
   };
 }

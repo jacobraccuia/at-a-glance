@@ -1,4 +1,5 @@
 import type { TaskOccurrence } from "../api/types";
+import { doneIn } from "../lib/doneIn";
 import { useCelebrate } from "../hooks/useCelebrate";
 import { useSwipeRow } from "../hooks/useSwipeRow";
 import { DoneSparkles } from "./DoneSparkles";
@@ -12,6 +13,7 @@ interface Props {
 
 export function OccurrenceRow({ occurrence, onComplete, onUndo }: Props) {
   const isDone = occurrence.status === "completed";
+  const span = isDone ? doneIn(occurrence.createdAt, occurrence.completedAt) : null;
   const { poof, celebrate } = useCelebrate(onComplete);
 
   // Recurring occurrences don't have their own snooze concept (snoozing
@@ -52,6 +54,7 @@ export function OccurrenceRow({ occurrence, onComplete, onUndo }: Props) {
               <span className="task-title">{occurrence.task?.title}</span>
               <div className="task-meta">
                 <span className="pill recurring">Recurring</span>
+                {span && <span className="pill">{span}</span>}
                 {occurrence.task?.bucket && (
                   <span className="pill" style={{ borderColor: occurrence.task.bucket.color ?? undefined }}>
                     {occurrence.task.bucket.name}

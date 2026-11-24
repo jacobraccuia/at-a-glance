@@ -7,7 +7,8 @@ enum ShellTab {
 struct MainShell: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.palette) private var palette
-    @State private var tab: ShellTab = .today
+    /// One list state for the top chips and the bottom tabs.
+    @State private var boardView: BoardView = .today
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -20,29 +21,9 @@ struct MainShell: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(palette.accentSoft)
                     }
-                    Group {
-                        switch tab {
-                        case .today:
-                            TaskBoardView(initial: .today)
-                        case .all:
-                            TaskBoardView(initial: .all)
-                        }
-                    }
+                    TaskBoardView(view: $boardView)
                 }
                 .background(palette.bg)
-                .navigationTitle(tab == .today ? "Today" : "All")
-                .navigationBarTitleDisplayMode(.large)
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        NavigationLink {
-                            AccountView()
-                        } label: {
-                            Image(systemName: "person.circle")
-                                .font(.title3)
-                        }
-                        .accessibilityLabel("Account")
-                    }
-                }
             }
             .safeAreaInset(edge: .bottom) {
                 bottomBar
@@ -58,11 +39,11 @@ struct MainShell: View {
             guard let link else { return }
             switch link {
             case .today:
-                tab = .today
+                boardView = .today
             case .talk:
                 model.talkOpen = true
             case .task(let id):
-                tab = .today
+                boardView = .today
                 model.pendingTaskId = id
             }
             model.link = nil
@@ -98,14 +79,15 @@ struct MainShell: View {
     }
 
     private func tabButton(_ value: ShellTab, _ title: String, _ symbol: String) -> some View {
-        Button {
-            tab = value
+        let selected = value == .all ? boardView == .all : boardView != .all
+        return Button {
+            boardView = value == .all ? .all : .today
         } label: {
             VStack(spacing: 4) {
                 Image(systemName: symbol)
                 Text(title).font(.caption2)
             }
-            .foregroundStyle(tab == value ? palette.accent : palette.muted)
+            .foregroundStyle(selected ? palette.accent : palette.muted)
             .frame(width: 64)
         }
     }

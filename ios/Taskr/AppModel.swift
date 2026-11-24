@@ -25,6 +25,10 @@ final class AppModel: ObservableObject {
     @Published var hideWork: Bool {
         didSet { UserDefaults.standard.set(hideWork, forKey: "taskr.hideWork") }
     }
+    /// Leaves completed tasks out of the list. Remembered.
+    @Published var hideFinished: Bool {
+        didSet { UserDefaults.standard.set(hideFinished, forKey: "taskr.hideFinished") }
+    }
     /// Easy-win session length. 15, 30, or 45.
     @Published var winMinutes: Int {
         didSet { UserDefaults.standard.set(winMinutes, forKey: "taskr.winMinutes") }
@@ -46,6 +50,7 @@ final class AppModel: ObservableObject {
         paletteChoice = PaletteChoice(rawValue: raw) ?? .auto
         bucketSpot = UserDefaults.standard.string(forKey: "taskr.bucket") ?? ""
         hideWork = UserDefaults.standard.bool(forKey: "taskr.hideWork")
+        hideFinished = UserDefaults.standard.bool(forKey: "taskr.hideFinished")
         let storedMinutes = UserDefaults.standard.object(forKey: "taskr.winMinutes") as? Int
         winMinutes = storedMinutes == 15 || storedMinutes == 45 ? storedMinutes! : 30
     }

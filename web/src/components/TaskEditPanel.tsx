@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api } from "../api/client";
 import type { Bucket, Task } from "../api/types";
+import { doneIn } from "../lib/doneIn";
 import { TaskDetailsFields, type TaskDetailsValue } from "./TaskDetailsFields";
 
 function toDatetimeLocal(iso: string | null): string {
@@ -14,6 +15,7 @@ function valuesFromTask(task: Task): TaskDetailsValue {
   return {
     bucketId: task.bucketId ?? "",
     importance: task.importance,
+    effort: task.effort ?? "",
     deadline: toDatetimeLocal(task.hardDeadline),
     estimateMinutes: task.estimateMinutes != null ? String(task.estimateMinutes) : "",
     waitingOn: task.waitingOn ?? "",
@@ -29,6 +31,7 @@ interface Props {
 }
 
 export function TaskEditPanel({ task, buckets, onSaved, onClose }: Props) {
+  const [title, setTitle] = useState(task.title);
   const [values, setValues] = useState<TaskDetailsValue>(valuesFromTask(task));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,8 +41,10 @@ export function TaskEditPanel({ task, buckets, onSaved, onClose }: Props) {
     setError(null);
     try {
       await api.patch(`/tasks/${task.id}`, {
+        title: title.trim() || task.title,
         bucketId: values.bucketId || null,
         importance: values.importance,
+        effort: values.effort || null,
         hardDeadline: values.deadline ? new Date(values.deadline).toISOString() : null,
         deadlineSource: values.deadline ? "explicit" : null,
         estimateMinutes: values.estimateMinutes ? parseInt(values.estimateMinutes, 10) : null,
@@ -57,7 +62,14 @@ export function TaskEditPanel({ task, buckets, onSaved, onClose }: Props) {
 
   return (
     <div className="task-edit-panel">
+      <label>
+        Title
+        <input value={title} onChange={(e) => setTitle(e.target.value)} />
+      </label>
       <TaskDetailsFields value={values} onChange={setValues} buckets={buckets} />
+      {task.status === "completed" && doneIn(task.createdAt, task.completedAt) && (
+        <p className="muted small">{doneIn(task.createdAt, task.completedAt)}</p>
+      )}
       {task.recurrenceRuleId && (
         <p className="muted small">Recurrence can't be edited yet once a task is created.</p>
       )}

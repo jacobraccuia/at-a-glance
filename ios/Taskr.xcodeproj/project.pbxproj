@@ -8,18 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		A1000000000000000000001B /* TaskrWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A10000000000000000000010 /* TaskrWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A1000000000000000000001E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001D /* Assets.xcassets */; };
 /* End PBXBuildFile section */
-
-/* Begin PBXFileReference section */
-		A10000000000000000000001 /* Taskr.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Taskr.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		A10000000000000000000010 /* TaskrWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = TaskrWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-/* End PBXFileReference section */
-
-/* Begin PBXFileSystemSynchronizedRootGroup section */
-		A10000000000000000000002 /* Taskr */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Taskr; sourceTree = "<group>"; };
-		A10000000000000000000011 /* TaskrWidget */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = TaskrWidget; sourceTree = "<group>"; };
-		A1000000000000000000001C /* Shared */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Shared; sourceTree = "<group>"; };
-/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXContainerItemProxy section */
 		A10000000000000000000017 /* PBXContainerItemProxy */ = {
@@ -44,6 +34,18 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		A10000000000000000000001 /* Taskr.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Taskr.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000010 /* TaskrWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = TaskrWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1000000000000000000001D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		A10000000000000000000002 /* Taskr */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Taskr; sourceTree = "<group>"; };
+		A10000000000000000000011 /* TaskrWidget */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = TaskrWidget; sourceTree = "<group>"; };
+		A1000000000000000000001C /* Shared */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Shared; sourceTree = "<group>"; };
+/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		A10000000000000000000003 /* Frameworks */ = {
@@ -78,6 +80,7 @@
 				A10000000000000000000002 /* Taskr */,
 				A10000000000000000000011 /* TaskrWidget */,
 				A1000000000000000000001C /* Shared */,
+				A1000000000000000000001D /* Assets.xcassets */,
 				A10000000000000000000004 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -91,6 +94,7 @@
 			buildPhases = (
 				A10000000000000000000007 /* Sources */,
 				A10000000000000000000003 /* Frameworks */,
+				A1000000000000000000001F /* Resources */,
 				A10000000000000000000015 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
@@ -155,6 +159,17 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXResourcesBuildPhase section */
+		A1000000000000000000001F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1000000000000000000001E /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		A10000000000000000000007 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -215,6 +230,7 @@
 		A1000000000000000000000D /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CODE_SIGN_ENTITLEMENTS = Config/Taskr.entitlements;
 				CODE_SIGN_STYLE = Automatic;
@@ -222,12 +238,12 @@
 				DEVELOPMENT_TEAM = 66LV5FN5Z7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = Config/Taskr-URL.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Working Title";
-				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
+				INFOPLIST_FILE = "Config/Taskr-URL.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Taskr;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Talk uses the microphone so you can speak tasks instead of typing them.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Talk turns your voice into text on this phone, then sends that text to your assistant.";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
@@ -249,6 +265,7 @@
 		A1000000000000000000000E /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CODE_SIGN_ENTITLEMENTS = Config/Taskr.entitlements;
 				CODE_SIGN_STYLE = Automatic;
@@ -256,12 +273,12 @@
 				DEVELOPMENT_TEAM = 66LV5FN5Z7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = Config/Taskr-URL.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Working Title";
-				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
+				INFOPLIST_FILE = "Config/Taskr-URL.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Taskr;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Talk uses the microphone so you can speak tasks instead of typing them.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Talk turns your voice into text on this phone, then sends that text to your assistant.";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
@@ -288,8 +305,9 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 66LV5FN5Z7;
+				ENABLE_DEBUG_DYLIB = NO;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = Config/TaskrWidget-Info.plist;
+				INFOPLIST_FILE = "Config/TaskrWidget-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Today;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -316,8 +334,9 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 66LV5FN5Z7;
+				ENABLE_DEBUG_DYLIB = NO;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = Config/TaskrWidget-Info.plist;
+				INFOPLIST_FILE = "Config/TaskrWidget-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Today;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (

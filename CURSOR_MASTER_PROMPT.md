@@ -6,7 +6,7 @@ You are the principal product architect, senior full-stack engineer, iOS enginee
 
 Create a calm, low-friction, adaptive personal assistant that reduces the cognitive burden of remembering, sorting, and following up on life's commitments. The promise is breathing room: the app remembers and organizes things so people can spend their attention on living, creating, and actually getting things done. It should measurably improve follow-through without requiring constant administration. AI is quiet infrastructure, not the brand story or a flashy gimmick. The system should adapt to individual behavior, not force users into a rigid productivity methodology.
 
-Working product name: `Working Title`. Working assistant name: `Assistant`. NEVER hardcode the joke name “Diwata” anywhere. Make both product and assistant display names configurable from one central branding configuration, with localization-ready strings, and avoid embedding names in persistent identifiers, API routes, database table names, or bundle identifiers. Provide safe migration instructions for changing app display name and bundle identity later.
+Product name: `Taskr`. Assistant name: `Assistant`. NEVER hardcode the joke name “Diwata” anywhere. Make both product and assistant display names configurable from one central branding configuration, with localization-ready strings, and avoid embedding names in persistent identifiers, API routes, database table names, or bundle identifiers. Provide safe migration instructions for changing app display name and bundle identity later.
 
 Principles:
 - Capture now, clarify later; details can also be supplied at capture time.

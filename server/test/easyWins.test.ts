@@ -26,6 +26,7 @@ function fakeTask(title: string, overrides: Partial<Task> = {}): Task {
     estimateConfidence: null,
     actualMinutes: null,
     importance: "medium",
+    effort: null,
     waitingOn: null,
     recurrenceRuleId: null,
     snoozedUntil: null,
@@ -82,6 +83,24 @@ describe("rankEasyWins", () => {
       25,
     );
     expect(wins[0].title).toBe("Tiny high");
+  });
+
+  it("lets Low Medium and High beat the minute guess", () => {
+    const wins = rankEasyWins(
+      [
+        fakeTask("Huge but low", { estimateMinutes: 180, effort: "low" }),
+        fakeTask("Short but high", { estimateMinutes: 5, effort: "high" }),
+        fakeTask("Medium job", { estimateMinutes: 10, effort: "medium" }),
+      ],
+      30,
+    );
+    expect(wins.map((w) => w.title)).toEqual(["Huge but low"]);
+
+    const wide = rankEasyWins(
+      [fakeTask("Medium job", { estimateMinutes: 10, effort: "medium" })],
+      45,
+    );
+    expect(wide.map((w) => w.title)).toEqual(["Medium job"]);
   });
 
   it("defaults budget to DEFAULT_EASY_WIN_MINUTES", () => {

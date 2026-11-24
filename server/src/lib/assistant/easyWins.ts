@@ -33,8 +33,13 @@ export function rankEasyWins(tasks: Task[], budgetMinutes: number = DEFAULT_EASY
     // Waiting on someone else is the opposite of an easy win.
     if (t.waitingOn && t.waitingOn.trim()) continue;
 
+    // A chosen effort beats the minute guess. High is never an easy win.
+    // Medium only fits the 45 minute chip. Low is small enough for any chip.
+    if (t.effort === "high") continue;
+    if (t.effort === "medium" && budget < 45) continue;
+
     const assumedMinutes = t.estimateMinutes ?? UNKNOWN_ESTIMATE_ASSUMPTION;
-    if (assumedMinutes > budget) continue;
+    if (t.effort == null && assumedMinutes > budget) continue;
 
     // Shorter = higher score. Unknown estimates get a small confidence penalty.
     let score = 100 - assumedMinutes;

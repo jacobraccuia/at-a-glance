@@ -17,6 +17,7 @@ export interface Bucket {
 
 export type TaskStatus = "captured" | "active" | "completed" | "dropped";
 export type Importance = "low" | "medium" | "high";
+export type Effort = "low" | "medium" | "high";
 
 export interface Task {
   id: string;
@@ -32,6 +33,7 @@ export interface Task {
   estimateMinutes: number | null;
   actualMinutes: number | null;
   importance: Importance;
+  effort: Effort | null;
   waitingOn: string | null;
   recurrenceRuleId: string | null;
   snoozedUntil: string | null;
@@ -49,6 +51,7 @@ export interface TaskOccurrence {
   occurrenceDate: string;
   status: OccurrenceStatus;
   completedAt: string | null;
+  createdAt?: string;
   task?: Task;
 }
 

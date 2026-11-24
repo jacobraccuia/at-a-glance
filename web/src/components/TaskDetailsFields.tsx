@@ -1,4 +1,4 @@
-import type { Bucket, Importance } from "../api/types";
+import type { Bucket, Effort, Importance } from "../api/types";
 
 // Shared, optional-field editor used by both task creation ("More details")
 // and editing an existing task. Every field here is optional by design --
@@ -6,6 +6,7 @@ import type { Bucket, Importance } from "../api/types";
 export interface TaskDetailsValue {
   bucketId: string; // "" = no bucket
   importance: Importance;
+  effort: "" | Effort;
   deadline: string; // datetime-local input value, "" = none
   estimateMinutes: string; // raw input string, "" = none
   waitingOn: string;
@@ -15,6 +16,7 @@ export interface TaskDetailsValue {
 export const emptyTaskDetails: TaskDetailsValue = {
   bucketId: "",
   importance: "medium",
+  effort: "",
   deadline: "",
   estimateMinutes: "",
   waitingOn: "",
@@ -57,6 +59,23 @@ export function TaskDetailsFields({ value, onChange, buckets }: Props) {
         Hard deadline (optional)
         <input type="datetime-local" value={value.deadline} onChange={(e) => set("deadline", e.target.value)} />
       </label>
+      <fieldset className="effort-field">
+        <legend>Effort</legend>
+        <div className="effort-choices" role="group" aria-label="Effort">
+          {(["low", "medium", "high"] as const).map((level) => (
+            <button
+              key={level}
+              type="button"
+              className={`view-chip${value.effort === level ? " active" : ""}`}
+              aria-pressed={value.effort === level}
+              onClick={() => set("effort", value.effort === level ? "" : level)}
+            >
+              {level === "low" ? "Low" : level === "medium" ? "Medium" : "High"}
+            </button>
+          ))}
+        </div>
+        <p className="muted small">Low can be an easy win. Medium only at 45 minutes. High never is. Leave it unset and the time guess decides.</p>
+      </fieldset>
       <label>
         Estimate (minutes)
         <input

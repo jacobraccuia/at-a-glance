@@ -12,11 +12,17 @@ struct TaskRowView: View {
     @State private var poof = false
     @State private var dragX: CGFloat = 0
 
-    private var swipeStage: String {
-        if dragX <= -76 { return "done" }
-        if dragX >= 168 { return "far" }
-        if dragX >= 76 { return "near" }
-        return "none"
+    private var canToday: Bool {
+        showAdd && task.recurrenceRuleId == nil && !ISO8601.isToday(task.attentionDate)
+    }
+
+    private var rightLabel: String {
+        if canToday {
+            if dragX >= 230 { return "Next week" }
+            if dragX >= 150 { return "Tomorrow" }
+            return "Today"
+        }
+        return dragX >= 168 ? "Next week" : "Tomorrow"
     }
 
     var body: some View {
@@ -34,7 +40,7 @@ struct TaskRowView: View {
         HStack {
             if dragX > 12 {
                 Image(systemName: "clock")
-                Text(swipeStage == "far" ? "Next week" : "Tomorrow")
+                Text(rightLabel)
                     .font(.caption.weight(.semibold))
                 Spacer()
             }
@@ -57,14 +63,19 @@ struct TaskRowView: View {
                 let dx = value.translation.width
                 let dy = value.translation.height
                 guard abs(dx) > abs(dy) else { return }
-                dragX = min(220, max(-220, dx))
+                let limit: CGFloat = canToday ? 300 : 220
+                dragX = min(limit, max(-limit, dx))
             }
             .onEnded { _ in
                 let x = dragX
                 dragX = 0
                 guard task.status != .completed else { return }
                 if x <= -76 { Task { await toggle() } }
-                else if x >= 168 { Task { await move("nextWeek") } }
+                else if canToday {
+                    if x >= 230 { Task { await move("nextWeek") } }
+                    else if x >= 150 { Task { await move("tomorrow") } }
+                    else if x >= 76 { Task { await move("today") } }
+                } else if x >= 168 { Task { await move("nextWeek") } }
                 else if x >= 76 { Task { await move("tomorrow") } }
             }
     }
@@ -96,10 +107,6 @@ struct TaskRowView: View {
             .onTapGesture { onOpen() }
 
             if task.status != .completed {
-                if showAdd && task.recurrenceRuleId == nil && !ISO8601.isToday(task.attentionDate) {
-                    icon("plus", label: "Today") { Task { await addToday() } }
-                }
-                icon("pencil", label: "Edit") { onOpen() }
                 icon("clock", label: "Tomorrow") { Task { await move("tomorrow") } }
                 icon("tray", label: "Later") { Task { await move("later") } }
                 icon("trash", label: "Drop") { Task { await drop() } }
@@ -121,11 +128,15 @@ struct TaskRowView: View {
                 pill(name)
             }
                 if task.importance == .high { pill("Important") }
+                if let effort = task.effort { pill("\(effort.label) effort") }
                 if let due = task.hardDeadline, let date = ISO8601.date(due) {
                     pill("Due \(date.formatted(date: .abbreviated, time: .omitted))")
                 }
                 if let wait = task.waitingOn, !wait.isEmpty { pill("Waiting: \(wait)") }
                 if let minutes = task.estimateMinutes { pill("~\(minutes)m") }
+                if task.status == .completed, let span = ISO8601.doneIn(from: task.createdAt, to: task.completedAt) {
+                    pill(span)
+                }
                 if let notes = task.notes, !notes.isEmpty { pill("Has notes") }
         }
         .font(.caption2)
@@ -184,9 +195,6 @@ struct TaskRowView: View {
         await onChange()
     }
 
-    private func addToday() async {
-        await move("today")
-    }
 }
 
 struct OccurrenceRowView: View {
@@ -207,7 +215,9 @@ struct OccurrenceRowView: View {
             }
             VStack(alignment: .leading) {
                 Text(occurrence.task?.title ?? "Recurring")
-                Text("Recurring").font(.caption2).foregroundStyle(palette.muted)
+                Text(occurrence.status == .completed ? (ISO8601.doneIn(from: occurrence.createdAt, to: occurrence.completedAt) ?? "Recurring") : "Recurring")
+                    .font(.caption2)
+                    .foregroundStyle(palette.muted)
             }
             Spacer()
         }

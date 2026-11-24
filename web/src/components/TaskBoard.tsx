@@ -1,18 +1,23 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
+import { branding } from "../config/branding";
 import type { Bucket, Task, TaskOccurrence, TaskStatus, TodayViewResponse } from "../api/types";
 import {
   applyBucketTint,
   isWorkBucket,
   readBucketSpot,
   readHideWork,
+  readHideFinished,
   readWinMinutes,
   saveBucketSpot,
   saveHideWork,
+  saveHideFinished,
   saveWinMinutes,
 } from "../theme/bucketTheme";
 import { EasyWinsStrip } from "./EasyWinsStrip";
-import { FilterIcon } from "./icons";
+import { FilterIcon, ProfileIcon } from "./icons";
+import { TaskEditPanel } from "./TaskEditPanel";
 import { TaskRow } from "./TaskRow";
 import { OccurrenceRow } from "./OccurrenceRow";
 import { QuickCapture } from "./QuickCapture";
@@ -25,7 +30,6 @@ const DATED_VIEWS = new Set<BoardView>(["today", "tomorrow", "nextWeek", "later"
 interface Props {
   /** Initial view — page can lock one, or user can switch. */
   initialView?: BoardView;
-  title?: string;
   /** Open this task's details immediately (home easy-win). */
   focusTaskId?: string | null;
 }
@@ -38,15 +42,9 @@ const VIEW_OPTIONS: { id: BoardView; label: string }[] = [
   { id: "all", label: "All" },
 ];
 
-const HEADINGS: Record<BoardView, string> = {
-  today: "Today",
-  tomorrow: "Tomorrow",
-  nextWeek: "Next week",
-  later: "Later",
-  all: "All tasks",
-};
-
-export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
+export function TaskBoard({ initialView = "all", focusTaskId }: Props) {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [view, setView] = useState<BoardView>(initialView);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [occurrences, setOccurrences] = useState<TaskOccurrence[]>([]);
@@ -55,18 +53,36 @@ export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "">("");
   const [spot, setSpot] = useState(readBucketSpot);
   const [hideWork, setHideWork] = useState(readHideWork);
+  const [hideFinished, setHideFinished] = useState(readHideFinished);
   const [winMinutes, setWinMinutes] = useState(readWinMinutes);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [winsToken, setWinsToken] = useState(0);
   const [hiddenWinIds, setHiddenWinIds] = useState<string[]>([]);
+  const [easyEdit, setEasyEdit] = useState<Task | null>(null);
 
   useEffect(() => {
     setView(initialView);
   }, [initialView]);
 
+  function chooseView(next: BoardView) {
+    setView(next);
+    if (next === "all") {
+      navigate("/all");
+      return;
+    }
+    const params = new URLSearchParams(location.search);
+    params.delete("task");
+    if (next === "today") params.delete("view");
+    else params.set("view", next);
+    const search = params.toString();
+    navigate({ pathname: "/", search: search ? `?${search}` : "" });
+  }
+
+  const loadTicket = useRef(0);
   const load = useCallback(() => {
+    const mine = ++loadTicket.current;
     setLoading(true);
     setWinsToken((n) => n + 1);
     const params = new URLSearchParams({ view });
@@ -81,6 +97,7 @@ export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
 
     tasksReq
       .then((body) => {
+        if (mine !== loadTicket.current) return;
         if (DATED_VIEWS.has(view)) {
           const tv = body as TodayViewResponse;
           setTasks(tv.tasks);
@@ -91,8 +108,12 @@ export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
         }
         setError(null);
       })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
+      .catch((e) => {
+        if (mine === loadTicket.current) setError(e.message);
+      })
+      .finally(() => {
+        if (mine === loadTicket.current) setLoading(false);
+      });
   }, [view, search, statusFilter, spot, hideWork]);
 
   useEffect(load, [load]);
@@ -105,7 +126,7 @@ export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
     .filter((b) => !(hideWork && isWorkBucket(b.name)))
     .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
   const pages = [
-    { id: "", name: "All", color: null as string | null },
+    { id: "", name: "All buckets", color: null as string | null },
     ...openBuckets.map((b) => ({ id: b.id, name: b.name, color: b.color })),
   ];
   const pageIndex = Math.max(0, pages.findIndex((p) => p.id === spot));
@@ -141,6 +162,12 @@ export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
     saveHideWork(next);
     const current = buckets.find((b) => b.id === spot);
     if (next && current && isWorkBucket(current.name)) chooseSpot("");
+  }
+
+  function toggleHideFinished() {
+    const next = !hideFinished;
+    setHideFinished(next);
+    saveHideFinished(next);
   }
 
   function chooseMinutes(minutes: number) {
@@ -232,20 +259,18 @@ export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
     await api.post(`/tasks/${t.id}/drop`);
     load();
   }
-  async function renameTask(t: Task, title: string) {
-    await api.patch(`/tasks/${t.id}`, { title });
-    load();
-  }
   async function addToToday(t: Task) {
     await moveHorizon(t, "today");
   }
 
-  const pending = view === "today" ? tasks.filter((t) => t.status === "active") : tasks;
-  const completed = view === "today" ? tasks.filter((t) => t.status === "completed") : [];
-  const pendingOccurrences = occurrences.filter((o) => o.status === "pending" || view !== "today");
-  const completedOccurrences = view === "today" ? occurrences.filter((o) => o.status === "completed") : [];
-
-  const heading = title ?? HEADINGS[view];
+  const visible = hideFinished ? tasks.filter((t) => t.status !== "completed") : tasks;
+  const pending = view === "today" ? visible.filter((t) => t.status === "active") : visible;
+  const completed = view === "today" && !hideFinished ? tasks.filter((t) => t.status === "completed") : [];
+  const pendingOccurrences = occurrences.filter((o) => {
+    if (hideFinished && o.status === "completed") return false;
+    return o.status === "pending" || view !== "today";
+  });
+  const completedOccurrences = view === "today" && !hideFinished ? occurrences.filter((o) => o.status === "completed") : [];
 
   return (
     <div
@@ -258,17 +283,22 @@ export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
       }}
     >
       <div className="board-title-row">
-        <h1>{heading}</h1>
-        <button
-          type="button"
-          className={`icon-button filter-toggle${filtersOpen || search || spot || statusFilter ? " active" : ""}`}
-          onClick={() => setFiltersOpen((o) => !o)}
-          aria-expanded={filtersOpen}
-          aria-label="Search and filter"
-          title="Search and filter"
-        >
-          <FilterIcon />
-        </button>
+        <h1>{branding.appName}</h1>
+        <div className="board-title-actions">
+          <button
+            type="button"
+            className={`icon-button filter-toggle${filtersOpen || search || spot || statusFilter ? " active" : ""}`}
+            onClick={() => setFiltersOpen((o) => !o)}
+            aria-expanded={filtersOpen}
+            aria-label="Search and filter"
+            title="Search and filter"
+          >
+            <FilterIcon />
+          </button>
+          <NavLink to="/account" className="header-profile" aria-label="Account" title="Account">
+            <ProfileIcon />
+          </NavLink>
+        </div>
       </div>
       <div className="view-filters" role="tablist" aria-label="Task view">
         {VIEW_OPTIONS.map((opt) => (
@@ -278,51 +308,65 @@ export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
             role="tab"
             aria-selected={view === opt.id}
             className={`view-chip${view === opt.id ? " active" : ""}`}
-            onClick={() => setView(opt.id)}
+            onClick={() => chooseView(opt.id)}
           >
             {opt.label}
           </button>
         ))}
       </div>
 
-      <div className="bucket-pager" aria-label="Buckets">
-        <button type="button" className="bucket-pager-arrow" onClick={() => shiftSpot(-1)} disabled={pageIndex <= 0} aria-label="Previous bucket">
-          ‹
-        </button>
-        <div className="bucket-pager-main">
-          <div className="bucket-pager-name">{page.name}</div>
-          {pages.length > 1 && (
-            <div className="bucket-dots">
-              {pages.map((p, i) => (
-                <button
-                  key={p.id || "all"}
-                  type="button"
-                  className={`bucket-dot${i === pageIndex ? " on" : ""}`}
-                  aria-label={p.name}
-                  aria-current={i === pageIndex ? "true" : undefined}
-                  onClick={() => chooseSpot(p.id)}
-                />
-              ))}
-            </div>
-          )}
+      <div className="bucket-block">
+        <div className="bucket-pager" aria-label="Buckets">
+          <button type="button" className="bucket-pager-arrow" onClick={() => shiftSpot(-1)} disabled={pageIndex <= 0} aria-label="Previous bucket">
+            ‹
+          </button>
+          <div className="bucket-pager-main">
+            <div className="bucket-pager-name">{page.name}</div>
+            {pages.length > 1 && (
+              <div className="bucket-dots">
+                {pages.map((p, i) => (
+                  <button
+                    key={p.id || "all"}
+                    type="button"
+                    className={`bucket-dot${i === pageIndex ? " on" : ""}`}
+                    aria-label={p.name}
+                    aria-current={i === pageIndex ? "true" : undefined}
+                    onClick={() => chooseSpot(p.id)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+          <button
+            type="button"
+            className="bucket-pager-arrow"
+            onClick={() => shiftSpot(1)}
+            disabled={pageIndex >= pages.length - 1}
+            aria-label="Next bucket"
+          >
+            ›
+          </button>
         </div>
-        <button
-          type="button"
-          className="bucket-pager-arrow"
-          onClick={() => shiftSpot(1)}
-          disabled={pageIndex >= pages.length - 1}
-          aria-label="Next bucket"
-        >
-          ›
-        </button>
-        <button
-          type="button"
-          className={`view-chip hide-work${hideWork ? " active" : ""}`}
-          aria-pressed={hideWork}
-          onClick={toggleHideWork}
-        >
-          {hideWork ? "Work hidden" : "Hide work"}
-        </button>
+        <div className="list-switches">
+          <button
+            type="button"
+            className={`view-chip hide-work${hideWork ? " active" : ""}`}
+            aria-pressed={hideWork}
+            title="Leaves the Work bucket out of this switcher"
+            onClick={toggleHideWork}
+          >
+            {hideWork ? "Work hidden" : "Hide work"}
+          </button>
+          <button
+            type="button"
+            className={`view-chip hide-work${hideFinished ? " active" : ""}`}
+            aria-pressed={hideFinished}
+            title="Leaves completed tasks out of this list"
+            onClick={toggleHideFinished}
+          >
+            {hideFinished ? "Finished hidden" : "Hide finished"}
+          </button>
+        </div>
       </div>
 
       {view === "today" && (
@@ -333,7 +377,18 @@ export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
           hideWork={hideWork}
           refreshToken={winsToken}
           hiddenIds={hiddenWinIds}
-          onComplete={(id) => void completeId(id)}
+          onOpen={(id) => {
+            void api.get<Task>(`/tasks/${id}`).then(setEasyEdit).catch(() => undefined);
+          }}
+        />
+      )}
+
+      {easyEdit && (
+        <TaskEditPanel
+          task={easyEdit}
+          buckets={buckets}
+          onSaved={load}
+          onClose={() => setEasyEdit(null)}
         />
       )}
 
@@ -374,7 +429,6 @@ export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
             onUndo={() => undoTask(t)}
             onMove={(horizon) => moveHorizon(t, horizon)}
             onDrop={() => dropTask(t)}
-            onRename={(title) => renameTask(t, title)}
             onAddToToday={view === "today" ? undefined : () => addToToday(t)}
             buckets={buckets}
             onDetailsSaved={load}
@@ -416,7 +470,6 @@ export function TaskBoard({ initialView = "all", title, focusTaskId }: Props) {
                 onUndo={() => undoTask(t)}
                 onMove={(horizon) => moveHorizon(t, horizon)}
                 onDrop={() => dropTask(t)}
-                onRename={(title) => renameTask(t, title)}
                 buckets={buckets}
                 onDetailsSaved={load}
               />

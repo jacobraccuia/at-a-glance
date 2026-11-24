@@ -1,9 +1,8 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
-import { branding } from "../config/branding";
 import { primeTalkAudio } from "../hooks/useAssistantTts";
 import { useVoiceSession } from "../voice/VoiceSessionContext";
-import { MicIcon, ProfileIcon } from "./icons";
+import { MicIcon } from "./icons";
 import { VoiceSheet } from "./VoiceSheet";
 
 // Today is the day. Talk stays the big center button. All is the other list.
@@ -35,15 +34,11 @@ const NAV_ITEMS = [
 export function Layout() {
   const { user } = useAuth();
   const { open, toggleSession } = useVoiceSession();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   return (
     <div className="app-shell">
-      <header className="app-header">
-        <span className="brand">{branding.appName}</span>
-        <NavLink to="/account" className="header-profile" aria-label="Account" title="Account">
-          <ProfileIcon />
-        </NavLink>
-      </header>
       {user?.isGuest && (
         <div className="guest-banner" role="status">
           Guest mode — sample data, nothing permanent. Tap Talk to try voice.
@@ -53,7 +48,16 @@ export function Layout() {
         <Outlet />
       </main>
       <nav className="bottom-nav">
-        <NavLink to={NAV_ITEMS[0].to} end={NAV_ITEMS[0].end}>
+        <NavLink
+          to="/"
+          end
+          onClick={(event) => {
+            if (location.pathname === "/" && location.search) {
+              event.preventDefault();
+              navigate("/");
+            }
+          }}
+        >
           {NAV_ITEMS[0].icon}
           {NAV_ITEMS[0].label}
         </NavLink>
@@ -70,7 +74,15 @@ export function Layout() {
           <MicIcon />
           <span>Talk</span>
         </button>
-        <NavLink to={NAV_ITEMS[1].to} end={NAV_ITEMS[1].end}>
+        <NavLink
+          to="/all"
+          onClick={(event) => {
+            if (location.pathname === "/all") {
+              event.preventDefault();
+              navigate("/all", { replace: true });
+            }
+          }}
+        >
           {NAV_ITEMS[1].icon}
           {NAV_ITEMS[1].label}
         </NavLink>

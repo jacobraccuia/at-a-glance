@@ -125,6 +125,12 @@ enum Importance {
   high
 }
 
+enum Effort {
+  low
+  medium
+  high
+}
+
 model RecurrenceRule {
   id         String    @id @default(uuid())
   frequency  String // "daily" | "weekly" | "monthly"
@@ -160,6 +166,8 @@ model Task {
   estimateConfidence Confidence?
   actualMinutes      Int?
   importance         Importance      @default(medium)
+  /// How big the work is. Null means the minute guess still decides easy wins.
+  effort             Effort?
   waitingOn          String?
   recurrenceRuleId   String?
   recurrenceRule     RecurrenceRule? @relation(fields: [recurrenceRuleId], references: [id], onDelete: SetNull)

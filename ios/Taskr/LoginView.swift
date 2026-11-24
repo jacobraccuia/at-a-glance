@@ -54,6 +54,15 @@ struct LoginView: View {
                 Text("No account — sample tasks, good for phone testing.")
                     .font(.footnote)
                     .foregroundStyle(palette.muted)
+
+                Button("Log in as Jacob") {
+                    Task { await asJacob() }
+                }
+                .buttonStyle(FillButtonStyle())
+                .disabled(busy)
+                Text("Your account. Skips typing for this test build.")
+                    .font(.footnote)
+                    .foregroundStyle(palette.muted)
             }
             .padding(24)
         }
@@ -87,6 +96,17 @@ struct LoginView: View {
         error = nil
         defer { busy = false }
         do { try await model.guest() } catch { self.error = error.localizedDescription }
+    }
+
+    private func asJacob() async {
+        busy = true
+        error = nil
+        defer { busy = false }
+        do {
+            try await model.login(email: "jacobraccuia@gmail.com", password: "taskr1234")
+        } catch {
+            self.error = error.localizedDescription
+        }
     }
 }
 

@@ -55,7 +55,7 @@ Not yet decided (explicitly deferred, will be revisited at the relevant phase):
 
 ## Branding configuration
 
-Per master prompt, the product name ("Working Title") and assistant name
+The product name ("Taskr") and assistant name
 ("Assistant") must never be hardcoded. `server/src/config/branding.ts` and
 `web/src/config/branding.ts` are the single sources of truth, read from
 environment variables with safe defaults, never embedded in table names,

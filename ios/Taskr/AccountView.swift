@@ -83,6 +83,8 @@ struct AccountView: View {
             }
         }
         .navigationTitle("Account")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
         .task { await load() }
         .onChange(of: nudgeTime) { _, date in
             MorningNudge.minutesFromMidnight = MorningNudge.minutes(from: date)

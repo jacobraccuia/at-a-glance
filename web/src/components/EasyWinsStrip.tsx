@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
-import { CheckIcon } from "./icons";
 
 interface EasyWin {
   id: string;
@@ -18,7 +17,7 @@ interface Props {
   hideWork?: boolean;
   refreshToken?: number;
   hiddenIds?: string[];
-  onComplete: (id: string) => void;
+  onOpen: (id: string) => void;
 }
 
 /** Short tasks that fit the time you actually have. Checking one off clears it here. */
@@ -29,22 +28,29 @@ export function EasyWinsStrip({
   hideWork = false,
   refreshToken = 0,
   hiddenIds = [],
-  onComplete,
+  onOpen,
 }: Props) {
   const [easyWins, setEasyWins] = useState<EasyWin[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const ticket = useRef(0);
 
   const loadEasyWins = useCallback(() => {
+    const mine = ++ticket.current;
     const params = new URLSearchParams({ minutes: String(minutes) });
     if (bucketId) params.set("bucketId", bucketId);
     else if (hideWork) params.set("excludeBucketName", "Work");
     api
       .get<{ minutes: number; wins: EasyWin[] }>(`/assistant/easy-wins?${params.toString()}`)
-      .then((r) => setEasyWins(r.wins))
+      .then((r) => {
+        if (mine !== ticket.current) return;
+        setEasyWins(r.wins);
+      })
       .catch(() => {
         /* non-fatal */
       })
-      .finally(() => setLoaded(true));
+      .finally(() => {
+        if (mine === ticket.current) setLoaded(true);
+      });
   }, [minutes, bucketId, hideWork]);
 
   useEffect(() => {
@@ -74,10 +80,7 @@ export function EasyWinsStrip({
       <ul className="easy-wins-list">
         {visible.map((w) => (
           <li key={w.id}>
-            <button type="button" className="easy-win-chip" onClick={() => onComplete(w.id)}>
-              <span className="easy-win-check" aria-hidden>
-                <CheckIcon />
-              </span>
+            <button type="button" className="easy-win-chip" onClick={() => onOpen(w.id)}>
               <span className="easy-win-title">{w.title}</span>
               <span className="easy-win-meta">
                 {w.estimateMinutes != null ? `~${w.estimateMinutes}m` : `~${w.assumedMinutes}m?`}

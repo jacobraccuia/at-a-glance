@@ -82,6 +82,7 @@ const createTaskSchema = z.object({
   deadlineSource: z.enum(["explicit", "inferred"]).optional(),
   estimateMinutes: z.number().int().min(0).optional(),
   importance: z.enum(["low", "medium", "high"]).optional(),
+  effort: z.enum(["low", "medium", "high"]).nullable().optional(),
   waitingOn: z.string().max(500).optional(),
   status: z.enum(["captured", "active"]).default("active"),
   recurrence: recurrenceSchema.optional(),
@@ -450,6 +451,7 @@ const updateTaskSchema = z.object({
   estimateMinutes: z.number().int().min(0).nullable().optional(),
   actualMinutes: z.number().int().min(0).nullable().optional(),
   importance: z.enum(["low", "medium", "high"]).optional(),
+  effort: z.enum(["low", "medium", "high"]).nullable().optional(),
   waitingOn: z.string().max(500).nullable().optional(),
 });
 
