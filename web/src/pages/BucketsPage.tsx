@@ -40,6 +40,16 @@ export function BucketsPage() {
     await api.post(`/buckets/${b.id}/unarchive`);
     load();
   }
+  async function rename(b: Bucket, next: string) {
+    const name = next.trim();
+    if (!name || name === b.name) return;
+    try {
+      await api.patch(`/buckets/${b.id}`, { name });
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to rename bucket");
+    }
+  }
 
   return (
     <div className="page">
@@ -54,12 +64,19 @@ export function BucketsPage() {
         {buckets.map((b) => (
           <li key={b.id} className={b.archivedAt ? "archived" : ""}>
             <span className="bucket-dot" style={{ backgroundColor: b.color ?? "#ccc" }} />
-            <span>{b.name}</span>
-            {b.archivedAt ? (
-              <button onClick={() => unarchive(b)}>Unarchive</button>
-            ) : (
-              <button onClick={() => archive(b)}>Archive</button>
-            )}
+            <input
+              className="bucket-name-input"
+              key={`${b.id}-${b.name}`}
+              defaultValue={b.name}
+              aria-label={`Rename ${b.name}`}
+              onBlur={(e) => void rename(b, e.target.value)}
+            />
+            {!b.isDefault &&
+              (b.archivedAt ? (
+                <button onClick={() => unarchive(b)}>Unarchive</button>
+              ) : (
+                <button onClick={() => archive(b)}>Archive</button>
+              ))}
           </li>
         ))}
       </ul>

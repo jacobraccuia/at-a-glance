@@ -3,6 +3,8 @@ import { z } from "zod";
 import { prisma } from "../db/client.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { logTaskEvent } from "../lib/taskEvents.js";
+import { ensureDefaultBucket } from "../lib/defaultBucket.js";
+import { listBucketLessons, matchLesson, rememberBucketChoice } from "../lib/assistant/bucketLessons.js";
 import { generateOccurrenceDates } from "../lib/recurrence.js";
 import {
   addDaysToDateString,
@@ -119,6 +121,8 @@ tasksRouter.post("/", async (req, res) => {
   if (data.bucketId) {
     const bucket = await prisma.bucket.findFirst({ where: { id: data.bucketId, userId } });
     if (!bucket) return res.status(400).json({ error: "bucketId does not belong to this user" });
+  } else {
+    data.bucketId = (await ensureDefaultBucket(userId)).id;
   }
   if (data.goalId) {
     const goal = await prisma.goal.findFirst({ where: { id: data.goalId, userId } });
@@ -210,7 +214,9 @@ function buildQuickCaptureData(
   addToToday: boolean,
   todayISO: string,
   tz: string,
-  buckets: { id: string; name: string }[]
+  buckets: { id: string; name: string }[],
+  lessons: { phrase: string; bucketName: string }[] = [],
+  defaultBucketId?: string
 ): QuickCaptureTaskData {
   const data: QuickCaptureTaskData = {
     userId,
@@ -233,6 +239,13 @@ function buildQuickCaptureData(
       if (match) data.bucketId = match.id;
     }
   }
+
+  const learned = matchLesson(data.title, lessons);
+  if (learned) {
+    const match = buckets.find((b) => b.name.toLowerCase() === learned.toLowerCase());
+    if (match) data.bucketId = match.id;
+  }
+  if (!data.bucketId && defaultBucketId) data.bucketId = defaultBucketId;
 
   const hasDate = intent != null && intent.dateKind !== "none" && intent.dateDaysFromNow != null;
   if (hasDate && intent) {
@@ -265,8 +278,10 @@ tasksRouter.post("/quick-capture", async (req, res) => {
   const todayISO = getCurrentDateInTimeZone(tz);
   const todayWeekday = getWeekdayName(todayISO);
 
+  const home = await ensureDefaultBucket(userId);
   const buckets = await prisma.bucket.findMany({ where: { userId, archivedAt: null } });
   const bucketNames = buckets.map((b) => b.name);
+  const lessons = await listBucketLessons(userId);
 
   // The model decides whether this is one task or several (and extracts
   // structured fields for each). If AI assistance is unavailable, fall
@@ -278,6 +293,7 @@ tasksRouter.post("/quick-capture", async (req, res) => {
     todayWeekday,
     upcomingWeekdayOffsets: getUpcomingWeekdayOffsets(todayISO),
     bucketNames,
+    lessons,
   });
 
   let rawItems: string[];
@@ -299,7 +315,7 @@ tasksRouter.post("/quick-capture", async (req, res) => {
   for (let i = 0; i < rawItems.length; i++) {
     // Default off: a bare capture lands in Later unless the caller opts into Today.
     const addToToday = parsed.data.addToToday === true;
-    const data = buildQuickCaptureData(userId, rawItems[i], intents[i], addToToday, todayISO, tz, buckets);
+    const data = buildQuickCaptureData(userId, rawItems[i], intents[i], addToToday, todayISO, tz, buckets, lessons, home.id);
     const task = await prisma.task.create({ data });
     await logTaskEvent(prisma, {
       taskId: task.id,
@@ -467,6 +483,15 @@ tasksRouter.patch("/:id", async (req, res) => {
   const data: Record<string, unknown> = { ...parsed.data };
   if ("attentionDate" in data) data.attentionDate = data.attentionDate ? new Date(data.attentionDate as string) : null;
   if ("hardDeadline" in data) data.hardDeadline = data.hardDeadline ? new Date(data.hardDeadline as string) : null;
+  if ("bucketId" in parsed.data) {
+    const next = parsed.data.bucketId || (await ensureDefaultBucket(userId)).id;
+    const bucket = await prisma.bucket.findFirst({ where: { id: next, userId, archivedAt: null } });
+    if (!bucket) return res.status(400).json({ error: "bucketId does not belong to this user" });
+    data.bucketId = next;
+    if (next !== task.bucketId) {
+      await rememberBucketChoice(userId, parsed.data.title ?? task.title, next);
+    }
+  }
 
   const updated = await prisma.task.update({ where: { id: task.id }, data });
   await logTaskEvent(prisma, { taskId: task.id, userId, type: "updated", payload: parsed.data as Record<string, unknown> });

@@ -85,6 +85,9 @@ bucketsRouter.post("/:id/archive", async (req, res) => {
   if (!bucket) {
     return res.status(404).json({ error: "Bucket not found" });
   }
+  if (bucket.isDefault) {
+    return res.status(400).json({ error: "This bucket stays. Rename it instead." });
+  }
   const updated = await prisma.bucket.update({
     where: { id: bucket.id },
     data: { archivedAt: new Date() },

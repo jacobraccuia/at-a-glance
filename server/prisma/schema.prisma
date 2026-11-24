@@ -21,6 +21,7 @@ model User {
   tasks         Task[]
   taskEvents    TaskEvent[]
   conversations AssistantConversation[]
+  lessons       BucketLesson[]
 }
 
 model AssistantConversation {
@@ -65,13 +66,31 @@ model Bucket {
   color      String?
   icon       String?
   sortOrder  Int       @default(0)
+  /// Home bucket. One per user. Rename is allowed. Archive is refused.
+  isDefault  Boolean   @default(false)
   archivedAt DateTime?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
-  tasks Task[]
+  tasks   Task[]
+  lessons BucketLesson[]
 
   @@index([userId])
+}
+
+/// A task title the user placed by hand, and the bucket they chose.
+model BucketLesson {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phrase    String
+  bucketId  String
+  bucket    Bucket   @relation(fields: [bucketId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, phrase])
+  @@index([userId, updatedAt])
 }
 
 enum GoalStatus {

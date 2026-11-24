@@ -3,6 +3,7 @@ import bcrypt from "bcrypt";
 import { z } from "zod";
 import { prisma } from "../db/client.js";
 import { createGuestUser, publicUser } from "../lib/guest.js";
+import { ensureDefaultBucket } from "../lib/defaultBucket.js";
 
 export const authRouter = Router();
 
@@ -36,6 +37,7 @@ authRouter.post("/register", async (req, res) => {
   });
 
   req.session.userId = user.id;
+  await ensureDefaultBucket(user.id);
   return res.status(201).json(publicUser(user, timezone));
 });
 

@@ -494,7 +494,6 @@ struct TaskDetailSheet: View {
                     .font(.footnote)
                     .foregroundStyle(palette.muted)
                 Picker("Bucket", selection: $bucketId) {
-                    Text("None").tag("")
                     ForEach(buckets) { Text($0.name).tag($0.id) }
                 }
             }
@@ -516,6 +515,9 @@ struct TaskDetailSheet: View {
                 effort = task.effort?.rawValue ?? ""
                 bucketId = task.bucketId ?? ""
                 buckets = (try? await model.api.get("buckets")) ?? []
+                if bucketId.isEmpty, let home = buckets.first(where: { $0.isDefault }) ?? buckets.first {
+                    bucketId = home.id
+                }
                 liveOn = TaskActivity.isRunning(task.id)
             }
         }

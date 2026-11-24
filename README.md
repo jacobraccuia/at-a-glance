@@ -13,6 +13,8 @@ A capture with no date goes to **Later**. The time chips are Today,
 Tomorrow, Next week, and Later. Easy Wins can be 15, 30, or 45 minutes.
 **Hide work** drops the Work bucket until you turn it back on.
 **Hide finished** drops completed tasks until you turn it back on.
+Every account starts with **Main**. It can be renamed and it cannot be archived.
+Moving a task into a bucket teaches the next similar capture.
 Guest login for phone testing.
 Swipe the task list sideways to move through buckets. All is the start.
 Each bucket colors the screen. The last bucket is remembered.

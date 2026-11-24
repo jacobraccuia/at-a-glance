@@ -32,6 +32,9 @@ export async function createGuestUser(timezone: string) {
     },
   });
 
+  await prisma.bucket.create({
+    data: { userId: user.id, name: "Main", color: "#8A8175", sortOrder: -1, isDefault: true },
+  });
   const personal = await prisma.bucket.create({
     data: { userId: user.id, name: "Personal", color: "#4C9F70", sortOrder: 0 },
   });

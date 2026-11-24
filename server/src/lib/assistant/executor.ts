@@ -9,6 +9,7 @@ import { addDaysToDateString, startOfDayInTimeZone } from "../timezone.js";
 import type { AssistantAction, AssistantPlan, CaptureItem } from "./conversationParser.js";
 import { DEFAULT_EASY_WIN_MINUTES, formatEasyWinsSummary, rankEasyWins, type EasyWin } from "./easyWins.js";
 import { classifyTask, horizonLabel, horizonWindows, type HorizonName } from "../horizons.js";
+import { matchLesson } from "./bucketLessons.js";
 
 export interface ExecutedAction {
   type: string;
@@ -72,6 +73,8 @@ interface ExecContext {
   todayISO: string;
   tz: string;
   buckets: { id: string; name: string }[];
+  lessons?: { phrase: string; bucketName: string }[];
+  defaultBucketId?: string;
   addToTodayDefault: boolean;
   weekStartsOn?: number;
 }
@@ -192,10 +195,13 @@ function buildCreateData(ctx: ExecContext, item: CaptureItem): Record<string, un
     data.estimateMinutes = item.estimateMinutes;
     data.estimateConfidence = "medium";
   }
-  if (item.bucketName) {
-    const match = ctx.buckets.find((b) => b.name.toLowerCase() === item.bucketName!.toLowerCase());
+  const learned = matchLesson(String(data.title), ctx.lessons ?? []);
+  const bucketName = learned ?? item.bucketName;
+  if (bucketName) {
+    const match = ctx.buckets.find((b) => b.name.toLowerCase() === bucketName.toLowerCase());
     if (match) data.bucketId = match.id;
   }
+  if (!data.bucketId && ctx.defaultBucketId) data.bucketId = ctx.defaultBucketId;
   if (!forceToday && !parkInbox && item.dateKind !== "none" && item.dateDaysFromNow != null) {
     const resolvedDateStr = addDaysToDateString(ctx.todayISO, item.dateDaysFromNow);
     const resolvedDate = startOfDayInTimeZone(resolvedDateStr, ctx.tz);

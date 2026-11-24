@@ -28,14 +28,12 @@ struct AccountView: View {
 
             Section("Buckets") {
                 ForEach(buckets) { bucket in
-                    HStack {
-                        Circle()
-                            .fill(Color(hex: bucket.color) ?? palette.muted)
-                            .frame(width: 10, height: 10)
-                        Text(bucket.name)
-                            .foregroundStyle(bucket.archivedAt == nil ? palette.ink : palette.muted)
-                        Spacer()
-                        if bucket.archivedAt == nil {
+                    BucketRenameRow(bucket: bucket, onRename: { name in
+                        await rename(bucket, name: name)
+                    }) {
+                        if bucket.isDefault {
+                            EmptyView()
+                        } else if bucket.archivedAt == nil {
                             Button("Archive") { Task { await setArchived(bucket, archived: true) } }
                                 .font(.caption)
                         } else {
@@ -119,10 +117,47 @@ struct AccountView: View {
         }
     }
 
+    private func rename(_ bucket: Bucket, name: String) async {
+        let next = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !next.isEmpty, next != bucket.name else { return }
+        struct Body: Encodable { let name: String }
+        do {
+            let _: Bucket = try await model.api.patch("buckets/\(bucket.id)", body: Body(name: next))
+            await load()
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
     private func setArchived(_ bucket: Bucket, archived: Bool) async {
         let path = archived ? "buckets/\(bucket.id)/archive" : "buckets/\(bucket.id)/unarchive"
         try? await model.api.postVoid(path)
         await load()
+    }
+}
+
+private struct BucketRenameRow<Trailing: View>: View {
+    let bucket: Bucket
+    var onRename: (String) async -> Void
+    @ViewBuilder var trailing: () -> Trailing
+    @State private var name: String
+
+    init(bucket: Bucket, onRename: @escaping (String) async -> Void, @ViewBuilder trailing: @escaping () -> Trailing) {
+        self.bucket = bucket
+        self.onRename = onRename
+        self.trailing = trailing
+        _name = State(initialValue: bucket.name)
+    }
+
+    var body: some View {
+        HStack {
+            Circle()
+                .fill(Color(hex: bucket.color) ?? .gray)
+                .frame(width: 10, height: 10)
+            TextField("Name", text: $name)
+                .onSubmit { Task { await onRename(name) } }
+            trailing()
+        }
     }
 }
 

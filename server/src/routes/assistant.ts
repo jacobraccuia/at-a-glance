@@ -14,6 +14,8 @@ import { parseConversationMessage } from "../lib/assistant/conversationParser.js
 import { executeAssistantPlan, fallbackPlanFromText } from "../lib/assistant/executor.js";
 import { DEFAULT_EASY_WIN_MINUTES, rankEasyWins } from "../lib/assistant/easyWins.js";
 import { bucketIdsByName } from "../lib/bucketFilter.js";
+import { ensureDefaultBucket } from "../lib/defaultBucket.js";
+import { listBucketLessons } from "../lib/assistant/bucketLessons.js";
 import { synthesizeSpeech } from "../lib/assistant/tts.js";
 
 export const assistantRouter = Router();
@@ -85,7 +87,9 @@ assistantRouter.post("/message", async (req, res) => {
 
   const tz = await getUserTimezone(userId);
   const todayISO = getCurrentDateInTimeZone(tz);
+  const home = await ensureDefaultBucket(userId);
   const buckets = await prisma.bucket.findMany({ where: { userId, archivedAt: null } });
+  const lessons = await listBucketLessons(userId);
   const openTasks = await prisma.task.findMany({
     where: { userId, status: { in: ["captured", "active", "completed"] } },
     orderBy: { updatedAt: "desc" },
@@ -109,6 +113,7 @@ assistantRouter.post("/message", async (req, res) => {
       todayWeekday: getWeekdayName(todayISO),
       upcomingWeekdayOffsets: getUpcomingWeekdayOffsets(todayISO),
       bucketNames: buckets.map((b) => b.name),
+      lessons,
       tasks: openTasks.map((t) => ({
         id: t.id,
         title: t.title,
@@ -128,6 +133,8 @@ assistantRouter.post("/message", async (req, res) => {
     todayISO,
     tz,
     buckets,
+    lessons,
+    defaultBucketId: home.id,
     // Spoken / typed creates with no date clues land in Later.
     addToTodayDefault: false,
     weekStartsOn: (await prisma.userPreferences.findUnique({ where: { userId } }))?.weekStartsOn ?? 0,

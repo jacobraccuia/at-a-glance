@@ -22,6 +22,11 @@ async function main() {
   });
 
   const existingBuckets = await prisma.bucket.findMany({ where: { userId: user.id } });
+  if (!existingBuckets.some((b) => b.isDefault)) {
+    await prisma.bucket.create({
+      data: { userId: user.id, name: "Main", color: "#8A8175", sortOrder: -1, isDefault: true },
+    });
+  }
   const personal =
     existingBuckets.find((b) => b.name === "Personal") ??
     (await prisma.bucket.create({ data: { userId: user.id, name: "Personal", color: "#4C9F70", sortOrder: 0 } }));

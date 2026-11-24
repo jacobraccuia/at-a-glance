@@ -14,6 +14,7 @@ struct Bucket: Codable, Identifiable, Hashable {
     let color: String?
     let icon: String?
     let sortOrder: Int
+    let isDefault: Bool
     let archivedAt: String?
 }
 

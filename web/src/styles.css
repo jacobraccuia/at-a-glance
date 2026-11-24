@@ -1751,6 +1751,16 @@ button.task-title:active {
   flex: 1;
 }
 
+.bucket-name-input {
+  flex: 1;
+  min-height: 32px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+}
+
 /* ---------- Task details / recurrence ---------- */
 
 .task-edit-panel,

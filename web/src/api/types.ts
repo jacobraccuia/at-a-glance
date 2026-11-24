@@ -12,6 +12,7 @@ export interface Bucket {
   color: string | null;
   icon: string | null;
   sortOrder: number;
+  isDefault?: boolean;
   archivedAt: string | null;
 }
 

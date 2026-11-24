@@ -38,8 +38,10 @@ export function TaskDetailsFields({ value, onChange, buckets }: Props) {
     <div className="task-details-fields">
       <label>
         Bucket
-        <select value={value.bucketId} onChange={(e) => set("bucketId", e.target.value)}>
-          <option value="">No bucket</option>
+        <select
+          value={value.bucketId || buckets.find((b) => b.isDefault)?.id || buckets[0]?.id || ""}
+          onChange={(e) => set("bucketId", e.target.value)}
+        >
           {buckets.map((b) => (
             <option key={b.id} value={b.id}>
               {b.name}

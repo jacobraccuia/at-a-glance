@@ -15,6 +15,7 @@
 //   response results in `null` -- the caller must have a deterministic
 //   fallback. This must never throw and never block capture for long.
 import { z } from "zod";
+import { formatLessonPrompt } from "./bucketLessons.js";
 import OpenAI from "openai";
 import { zodResponseFormat } from "openai/helpers/zod";
 
@@ -83,6 +84,8 @@ export interface ParseCaptureContext {
   /** This user's existing, non-archived bucket names. The model may only
    *  choose from this list (or null) -- never invent a new one. */
   bucketNames: string[];
+  /** Placements the user made by hand. The model should follow a close match. */
+  lessons?: { phrase: string; bucketName: string }[];
 }
 
 const PARSE_TIMEOUT_MS = 6000;
@@ -116,7 +119,8 @@ function buildSystemPrompt(context: ParseCaptureContext): string {
     "the linguistic distinction is too ambiguous to resolve otherwise.) " +
     `Existing buckets the user can be matched to (choose exactly one of these or null, never invent a new one): ${
       context.bucketNames.length > 0 ? context.bucketNames.join(", ") : "(none yet)"
-    }.`
+    }. ` +
+    formatLessonPrompt(context.lessons ?? [])
   );
 }
 

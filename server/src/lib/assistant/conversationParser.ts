@@ -8,6 +8,7 @@
 import { z } from "zod";
 import OpenAI from "openai";
 import { zodResponseFormat } from "openai/helpers/zod";
+import { formatLessonPrompt } from "./bucketLessons.js";
 
 const CaptureItemSchema = z.object({
   cleanTitle: z.string(),
@@ -114,6 +115,7 @@ export interface ParseConversationContext {
   todayWeekday: string;
   upcomingWeekdayOffsets: Record<string, number>;
   bucketNames: string[];
+  lessons?: { phrase: string; bucketName: string }[];
   tasks: TaskSnapshot[];
   history: ConversationTurn[];
 }
@@ -169,6 +171,7 @@ export async function parseConversationMessage(
     `Existing buckets (match exactly or null, never invent): ${
       context.bucketNames.length > 0 ? context.bucketNames.join(", ") : "(none yet)"
     }.`,
+    formatLessonPrompt(context.lessons ?? []),
     "",
     "The user's current open tasks (use these to resolve references like \"that drop party thing\"):",
     formatTaskSnapshot(context.tasks),
