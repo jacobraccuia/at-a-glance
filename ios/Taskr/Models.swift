@@ -153,6 +153,60 @@ struct AssistantReply: Decodable {
     let executed: [ExecutedAction]
 }
 
+enum DayStamp {
+    /// Midnight in the phone zone, the account zone, or UTC means no clock was chosen.
+    static func isDateOnly(_ date: Date, accountTimeZone: String?) -> Bool {
+        calendars(accountTimeZone).contains { calendar in
+            let parts = calendar.dateComponents([.hour, .minute], from: date)
+            return parts.hour == 0 && parts.minute == 0
+        }
+    }
+
+    static func phrase(_ date: Date, time: Date?) -> String {
+        let day = date.formatted(.dateTime.weekday(.wide).month(.abbreviated).day())
+        guard let time else { return day }
+        return "\(day) · \(time.formatted(date: .omitted, time: .shortened))"
+    }
+
+    static func shortDay(_ date: Date, time: Date?) -> String {
+        let day = date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+        guard let time else { return day }
+        return "\(day) \(time.formatted(date: .omitted, time: .shortened))"
+    }
+
+    static func combine(day: Date, time: Date?) -> Date {
+        var parts = Calendar.current.dateComponents([.year, .month, .day], from: day)
+        if let time {
+            let clock = Calendar.current.dateComponents([.hour, .minute], from: time)
+            parts.hour = clock.hour
+            parts.minute = clock.minute
+        } else {
+            parts.hour = 0
+            parts.minute = 0
+        }
+        return Calendar.current.date(from: parts) ?? day
+    }
+
+    static func at(hour: Int, on day: Date) -> Date {
+        var parts = Calendar.current.dateComponents([.year, .month, .day], from: day)
+        parts.hour = hour
+        parts.minute = 0
+        return Calendar.current.date(from: parts) ?? day
+    }
+
+    private static func calendars(_ accountTimeZone: String?) -> [Calendar] {
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(secondsFromGMT: 0) ?? .gmt
+        var zones = [Calendar.current, utc]
+        if let accountTimeZone, let zone = TimeZone(identifier: accountTimeZone) {
+            var account = Calendar(identifier: .gregorian)
+            account.timeZone = zone
+            zones.append(account)
+        }
+        return zones
+    }
+}
+
 enum ISO8601 {
     static func date(_ raw: String) -> Date? {
         let withFraction = ISO8601DateFormatter()

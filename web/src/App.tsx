@@ -6,6 +6,7 @@ import { UpcomingPage } from "./pages/UpcomingPage";
 import { AllTasksPage } from "./pages/AllTasksPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { Layout } from "./components/Layout";
+import { readHome } from "./home";
 import { VoiceSessionProvider } from "./voice/VoiceSessionContext";
 
 function RequireAuth({ children }: { children: React.ReactElement }) {
@@ -13,6 +14,10 @@ function RequireAuth({ children }: { children: React.ReactElement }) {
   if (loading) return <p className="muted center">Loading...</p>;
   if (!user) return <Navigate to="/login" replace />;
   return children;
+}
+
+function StartPage() {
+  return readHome() === "all" ? <Navigate to="/all" replace /> : <TodayPage />;
 }
 
 function RouterContent() {
@@ -28,10 +33,9 @@ function RouterContent() {
           </RequireAuth>
         }
       >
-        {/* Today is the day you open. Talk sheet stays over it. */}
-        <Route path="/" element={<TodayPage />} />
+        <Route path="/" element={<StartPage />} />
         <Route path="/assistant" element={<Navigate to="/" replace />} />
-        <Route path="/today" element={<Navigate to="/" replace />} />
+        <Route path="/today" element={<TodayPage />} />
         <Route path="/upcoming" element={<UpcomingPage />} />
         <Route path="/all" element={<AllTasksPage />} />
         <Route path="/buckets" element={<Navigate to="/account" replace />} />

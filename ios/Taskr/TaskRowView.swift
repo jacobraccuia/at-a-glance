@@ -13,16 +13,18 @@ struct TaskRowView: View {
     @State private var poof = false
     @State private var stamp: String?
     @State private var dragX: CGFloat = 0
+    @State private var letScroll = false
 
-    private let commit: CGFloat = 140
+    /// Far enough that a diagonal scroll cannot archive a task.
+    private let commit: CGFloat = 200
 
     private var rightLabel: String {
-        dragX >= 240 ? "Upcoming" : "Tomorrow"
+        dragX >= 300 ? "Upcoming" : "Tomorrow"
     }
 
     private var swipeColor: Color {
         if dragX < 0 { return Color(red: 0.38, green: 0.4, blue: 0.5) }
-        return dragX >= 240 ? Color(red: 0.55, green: 0.32, blue: 0.08) : Color(red: 0.85, green: 0.52, blue: 0.1)
+        return dragX >= 300 ? Color(red: 0.55, green: 0.32, blue: 0.08) : Color(red: 0.85, green: 0.52, blue: 0.1)
     }
 
     var body: some View {
@@ -30,7 +32,7 @@ struct TaskRowView: View {
             swipeBackdrop
             rowBody
                 .offset(x: dragX)
-                .gesture(rowSwipe)
+                .simultaneousGesture(rowSwipe)
         }
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .animation(dragX == 0 ? .easeOut(duration: 0.2) : nil, value: dragX)
@@ -57,24 +59,35 @@ struct TaskRowView: View {
     }
 
     private var rowSwipe: some Gesture {
-        DragGesture(minimumDistance: 18, coordinateSpace: .local)
+        DragGesture(minimumDistance: 28, coordinateSpace: .local)
             .onChanged { value in
                 guard task.status != .completed, stamp == nil else { return }
                 let dx = value.translation.width
                 let dy = value.translation.height
-                guard abs(dx) > abs(dy) else { return }
-                dragX = min(280, max(-280, dx))
+                if abs(dx) < 8 && abs(dy) < 8 { letScroll = false }
+                if letScroll { return }
+                if abs(dy) > 22 && abs(dy) >= abs(dx) {
+                    letScroll = true
+                    dragX = 0
+                    onClaimSwipe(false)
+                    return
+                }
+                guard abs(dx) > 48, abs(dx) > abs(dy) * 2 else { return }
+                dragX = min(320, max(-320, dx))
                 onClaimSwipe(abs(dragX) >= commit)
             }
-            .onEnded { _ in
+            .onEnded { value in
                 let x = dragX
+                let dy = value.translation.height
+                let scrolling = letScroll
                 dragX = 0
-                let claimed = abs(x) >= commit
+                letScroll = false
+                let claimed = !scrolling && abs(x) >= commit && abs(x) > abs(dy) * 2
                 onClaimSwipe(claimed)
                 DispatchQueue.main.async { onClaimSwipe(false) }
                 guard task.status != .completed, claimed else { return }
                 if x <= -commit { Task { await archive() } }
-                else if x >= 240 { Task { await settle("Upcoming") { await move("nextWeek") } } }
+                else if x >= 300 { Task { await settle("Upcoming") { await move("nextWeek") } } }
                 else { Task { await settle("Tomorrow") { await move("tomorrow") } } }
             }
     }
@@ -120,32 +133,32 @@ struct TaskRowView: View {
     }
 
     private var hasMeta: Bool {
-        if task.importance == .high || task.effort != nil || task.hardDeadline != nil || task.estimateMinutes != nil {
+        if task.importance == .high || task.effort != nil || task.hardDeadline != nil || task.attentionDate != nil || task.estimateMinutes != nil {
             return true
         }
         if let wait = task.waitingOn, !wait.isEmpty { return true }
         if let notes = task.notes, !notes.isEmpty { return true }
         if task.status == .completed, ISO8601.doneIn(from: task.createdAt, to: task.completedAt) != nil { return true }
-        if let attention = task.attentionDate, let date = ISO8601.date(attention), hasClock(date) { return true }
+        if let attention = task.attentionDate, ISO8601.date(attention) != nil { return true }
         return false
     }
 
-    /// Midnight means the day was saved with no clock. Leave that as a date.
-    private func hasClock(_ date: Date) -> Bool {
-        let parts = Calendar.current.dateComponents([.hour, .minute], from: date)
-        return (parts.hour ?? 0) != 0 || (parts.minute ?? 0) != 0
+    /// The day it was placed on. A hard deadline with no day says Due.
+    private var whenLabel: String? {
+        let scheduled = task.attentionDate.flatMap(ISO8601.date)
+        let deadline = task.hardDeadline.flatMap(ISO8601.date)
+        guard let date = scheduled ?? deadline else { return nil }
+        let time = DayStamp.isDateOnly(date, accountTimeZone: model.user?.timezone) ? nil : date
+        let label = DayStamp.shortDay(date, time: time)
+        return scheduled == nil ? "Due \(label)" : label
     }
 
     private var meta: some View {
         HStack(spacing: 6) {
             if task.importance == .high { pill("Important") }
                 if let effort = task.effort { pill("\(effort.label) effort") }
-                if let due = task.hardDeadline, let date = ISO8601.date(due) {
-                    pill(hasClock(date)
-                        ? "Due \(date.formatted(date: .abbreviated, time: .shortened))"
-                        : "Due \(date.formatted(date: .abbreviated, time: .omitted))")
-                } else if let attention = task.attentionDate, let date = ISO8601.date(attention), hasClock(date) {
-                    pill(date.formatted(date: .omitted, time: .shortened))
+                if let label = whenLabel {
+                    pill(label)
                 }
                 if let wait = task.waitingOn, !wait.isEmpty { pill("Waiting: \(wait)") }
                 if let minutes = task.estimateMinutes { pill("~\(minutes)m") }

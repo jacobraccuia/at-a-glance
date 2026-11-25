@@ -6,6 +6,7 @@ import { PersonalityMark } from "../components/icons";
 import { PalettePicker } from "../components/PalettePicker";
 import { useAuth } from "../auth/AuthContext";
 import { BucketsPage } from "./BucketsPage";
+import { readHome, saveHome, type HomeChoice } from "../home";
 
 interface Personality {
   id: string;
@@ -36,6 +37,7 @@ export function SettingsPage() {
   const [personalityError, setPersonalityError] = useState<string | null>(null);
   const [memories, setMemories] = useState<MemoryRow[]>([]);
   const [usage, setUsage] = useState<Usage | null>(null);
+  const [home, setHome] = useState<HomeChoice>(readHome);
 
   useEffect(() => {
     api.get<Personality[]>("/assistant/personalities").then(setPersonalities).catch(() => undefined);
@@ -94,6 +96,31 @@ export function SettingsPage() {
       <h1>Account</h1>
       <p className="muted small account-who">{user?.isGuest ? "Guest" : user?.displayName}</p>
       <PalettePicker />
+      <section className="account-block">
+        <h2>Home</h2>
+        <div className="focus-row" role="group" aria-label="Home list">
+          {(
+            [
+              ["all", "Everything"],
+              ["today", "Today"],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              className={home === id ? "on" : ""}
+              aria-pressed={home === id}
+              onClick={() => {
+                setHome(id);
+                saveHome(id);
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="muted small">Everything opens on Today, Tomorrow, Upcoming, and Later.</p>
+      </section>
       <section className="account-block">
         <h2>Assistant</h2>
         <div className="personality-row">

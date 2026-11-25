@@ -5,7 +5,8 @@ struct MainShell: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.palette) private var palette
     /// One list state for the top chips and the bottom tabs.
-    @State private var boardView: BoardView = .today
+    @State private var boardView: BoardView = .all
+    @State private var appliedHome = false
     /// Keyboard height from the bottom of the screen. Zero when it is hidden.
     @State private var keyboardOverlap: CGFloat = 0
 
@@ -37,6 +38,12 @@ struct MainShell: View {
             }
         }
         .animation(.spring(duration: 0.28), value: model.talkOpen)
+        .onAppear {
+            guard !appliedHome else { return }
+            appliedHome = true
+            boardView = model.homeView
+        }
+        .onChange(of: model.homeView) { _, next in boardView = next }
         .onChange(of: model.link) { _, link in
             guard let link else { return }
             switch link {

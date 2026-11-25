@@ -30,6 +30,10 @@ struct AccountView: View {
                         Text(choice.label).tag(choice)
                     }
                 }
+                Picker("Home", selection: $model.homeView) {
+                    Text("Today").tag(BoardView.today)
+                    Text("Everything").tag(BoardView.all)
+                }
             } header: {
                 Text("Account")
             }

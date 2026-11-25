@@ -32,6 +32,10 @@ final class AppModel: ObservableObject {
     @Published var winMinutes: Int {
         didSet { UserDefaults.standard.set(winMinutes, forKey: "taskr.winMinutes") }
     }
+    /// Which list opens. Today or Everything.
+    @Published var homeView: BoardView {
+        didSet { UserDefaults.standard.set(homeView.rawValue, forKey: "taskr.home") }
+    }
     /// Hex from the current bucket. Nil on All.
     @Published var bucketTintHex: String?
     /// Set by a widget tap or the morning note. The shell consumes it.
@@ -51,6 +55,7 @@ final class AppModel: ObservableObject {
         hideFinished = UserDefaults.standard.bool(forKey: "taskr.hideFinished")
         let storedMinutes = UserDefaults.standard.object(forKey: "taskr.winMinutes") as? Int
         winMinutes = storedMinutes == 15 || storedMinutes == 45 ? storedMinutes! : 30
+        homeView = UserDefaults.standard.string(forKey: "taskr.home") == "today" ? .today : .all
     }
 
     func restore() async {

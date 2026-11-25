@@ -5,8 +5,10 @@ cognitive overhead. See `CURSOR_MASTER_PROMPT.md` for the full product spec
 and `docs/` for architecture, data model, implementation plan, integrations,
 and privacy documentation.
 
-**Status:** Phase 1 complete. Phase 2: open on **Today**. Bottom bar is
-Today, a center **Talk** mic, and Everything. Account is the profile icon.
+**Status:** Phase 1 complete. Phase 2: open on **Everything**. Bottom bar is
+Today, a center **Talk** mic, and Everything. Account sets the home list
+back to Today. A dated task shows its day. A clock shows only when one
+was set. A sideways swipe has to be deliberate. Account is the profile icon.
 Talk opens Puck. The mic starts immediately. A quiet call hangs up after
 20 seconds. A named clock time stays on that day. Midnight means the day
 only. A capture with no date goes to **Today**. Saying later stays Later.

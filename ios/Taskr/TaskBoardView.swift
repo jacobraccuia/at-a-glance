@@ -43,7 +43,7 @@ struct TaskBoardView: View {
     private var tomorrowPendingOccurrences: [TaskOccurrence] {
         tomorrowOccurrences.filter { $0.status == .pending && inSpot($0.task?.bucketId) }
     }
-    /// Everything, stacked Today → Tomorrow → Upcoming → Later. Empty groups stay out.
+    /// Everything, stacked Today → Tomorrow → Upcoming → Later. Tomorrow stays even when empty.
     private struct HorizonStack: Identifiable {
         let horizon: BoardView
         let tasks: [TaskItem]
@@ -54,7 +54,8 @@ struct TaskBoardView: View {
         let order: [BoardView] = [.today, .tomorrow, .nextWeek, .later]
         return order.compactMap { horizon in
             let rows = pending.filter { place(of: $0) == horizon }
-            return rows.isEmpty ? nil : HorizonStack(horizon: horizon, tasks: rows)
+            if rows.isEmpty && horizon != .tomorrow { return nil }
+            return HorizonStack(horizon: horizon, tasks: rows)
         }
     }
 
@@ -112,6 +113,10 @@ struct TaskBoardView: View {
                             Text(stack.horizon.label)
                                 .font(.headline)
                                 .padding(.top, index == 0 ? 4 : 16)
+                            if stack.tasks.isEmpty {
+                                Text(stack.horizon == .tomorrow ? "Nothing for tomorrow." : "Nothing here.")
+                                    .foregroundStyle(palette.muted)
+                            }
                             ForEach(stack.tasks) { task in
                                 TaskRowView(task: task, onChange: { await reload() }, onOpen: { detail = task })
                             }
@@ -381,8 +386,14 @@ struct TaskDetailSheet: View {
     @State private var notes: String = ""
     @State private var estimate: String = ""
     @State private var waiting: String = ""
+    @State private var whenOn = false
+    @State private var when = Date()
+    @State private var timeOn = false
+    @State private var whenTime = Date()
     @State private var deadlineOn = false
     @State private var deadline = Date()
+    @State private var deadlineTimeOn = false
+    @State private var deadlineTime = Date()
     @State private var importance: Importance = .medium
     @State private var effort = ""
     @State private var bucketId: String = ""
@@ -392,96 +403,174 @@ struct TaskDetailSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    labeled("Title") {
+                VStack(alignment: .leading, spacing: 14) {
+                    card {
                         TextField("Title", text: $title)
                             .font(.title2.weight(.semibold))
-                    }
-                    labeled("Notes") {
                         TextField("Notes", text: $notes, axis: .vertical)
-                            .lineLimit(2...6)
+                            .font(.subheadline)
+                            .foregroundStyle(notes.isEmpty ? palette.muted : palette.ink)
+                            .lineLimit(2...5)
                     }
-                    labeled("Bucket") {
-                        Menu(bucketName) {
-                            ForEach(buckets) { bucket in
-                                Button(bucket.name) { bucketId = bucket.id }
+                    card {
+                        HStack(alignment: .firstTextBaseline) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("When")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(palette.muted)
+                                Text(whenOn ? DayStamp.phrase(when, time: timeOn ? whenTime : nil) : "No day")
+                                    .font(.title3.weight(.semibold))
+                            }
+                            Spacer(minLength: 12)
+                            Toggle("Day", isOn: $whenOn)
+                                .labelsHidden()
+                        }
+                        if whenOn {
+                            DatePicker("Day", selection: $when, displayedComponents: .date)
+                                .labelsHidden()
+                            detailRow("Time") {
+                                if timeOn {
+                                    DatePicker("Time", selection: $whenTime, displayedComponents: .hourAndMinute)
+                                        .labelsHidden()
+                                } else {
+                                    Text("None").foregroundStyle(palette.muted)
+                                }
+                                Toggle("Time", isOn: $timeOn)
+                                    .labelsHidden()
                             }
                         }
-                        .buttonStyle(.bordered)
                     }
-                    labeled("Importance") {
-                        Menu(importance.rawValue.capitalized) {
-                            ForEach(Importance.allCases, id: \.self) { level in
-                                Button(level.rawValue.capitalized) { importance = level }
+                    card {
+                        detailRow("Bucket") {
+                            Menu(bucketName) {
+                                ForEach(buckets) { bucket in
+                                    Button(bucket.name) { bucketId = bucket.id }
+                                }
                             }
+                            .fontWeight(.semibold)
                         }
-                        .buttonStyle(.bordered)
-                    }
-                    labeled("Effort") {
-                        Menu(effort.isEmpty ? "Not set" : effort.capitalized) {
-                            Button("Not set") { effort = "" }
-                            Button("Low") { effort = "low" }
-                            Button("Medium") { effort = "medium" }
-                            Button("High") { effort = "high" }
+                        divider
+                        detailRow("Importance") {
+                            Menu(importance.rawValue.capitalized) {
+                                ForEach(Importance.allCases, id: \.self) { level in
+                                    Button(level.rawValue.capitalized) { importance = level }
+                                }
+                            }
+                            .fontWeight(.semibold)
                         }
-                        .buttonStyle(.bordered)
-                    }
-                    labeled("Estimate") {
-                        TextField("Minutes", text: $estimate)
-                            .keyboardType(.numberPad)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(palette.surface)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                    }
-                    labeled("Waiting on") {
-                        TextField("Who or what", text: $waiting)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(palette.surface)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                    }
-                    labeled("Deadline") {
-                        Toggle(deadlineOn ? "On" : "None", isOn: $deadlineOn)
+                        divider
+                        detailRow("Effort") {
+                            Menu(effort.isEmpty ? "Not set" : effort.capitalized) {
+                                Button("Not set") { effort = "" }
+                                Button("Low") { effort = "low" }
+                                Button("Medium") { effort = "medium" }
+                                Button("High") { effort = "high" }
+                            }
+                            .fontWeight(.semibold)
+                            .foregroundStyle(effort.isEmpty ? palette.muted : palette.ink)
+                        }
+                        divider
+                        detailRow("Estimate") {
+                            TextField("min", text: $estimate)
+                                .keyboardType(.numberPad)
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 72)
+                        }
+                        divider
+                        detailRow("Waiting on") {
+                            TextField("Who or what", text: $waiting)
+                                .multilineTextAlignment(.trailing)
+                        }
+                        divider
+                        detailRow("Deadline") {
+                            Toggle("Deadline", isOn: $deadlineOn)
+                                .labelsHidden()
+                        }
                         if deadlineOn {
-                            DatePicker("Date", selection: $deadline, displayedComponents: [.date, .hourAndMinute])
+                            DatePicker("Deadline day", selection: $deadline, displayedComponents: .date)
+                                .labelsHidden()
+                            detailRow("Deadline time") {
+                                if deadlineTimeOn {
+                                    DatePicker("Deadline time", selection: $deadlineTime, displayedComponents: .hourAndMinute)
+                                        .labelsHidden()
+                                } else {
+                                    Text("None").foregroundStyle(palette.muted)
+                                }
+                                Toggle("Deadline time", isOn: $deadlineTimeOn)
+                                    .labelsHidden()
+                            }
                         }
                     }
-                    Button(liveOn ? "Stop live" : "Start live") {
-                        Task { await toggleLive() }
+                    card {
+                        Button {
+                            Task { await toggleLive() }
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: liveOn ? "stop.circle.fill" : "play.circle.fill")
+                                Text(liveOn ? "Stop live" : "Start live")
+                                Spacer()
+                            }
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(palette.accent)
+                        }
+                        if let liveNote {
+                            Text(liveNote).font(.footnote).foregroundStyle(palette.danger)
+                        }
+                        if task.status == .completed, let span = ISO8601.doneIn(from: task.createdAt, to: task.completedAt) {
+                            Text(span).font(.footnote).foregroundStyle(palette.muted)
+                        }
                     }
-                    .font(.subheadline.weight(.semibold))
-                    if let liveNote {
-                        Text(liveNote).font(.footnote).foregroundStyle(palette.danger)
-                    }
-                    if task.status == .completed, let span = ISO8601.doneIn(from: task.createdAt, to: task.completedAt) {
-                        Text(span).font(.footnote).foregroundStyle(palette.muted)
-                    }
-                    Button("Delete", role: .destructive) {
+                    Button("Delete task", role: .destructive) {
                         Task { await remove() }
                     }
-                    .padding(.top, 8)
+                    .font(.subheadline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 6)
                 }
-                .padding(20)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+                .padding(.bottom, 24)
             }
             .background(palette.bg)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Close") { Task { await save() } } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { Task { await save() } }
+                }
             }
             .task { await load() }
+            .onChange(of: timeOn) { _, on in
+                guard on, DayStamp.isDateOnly(whenTime, accountTimeZone: model.user?.timezone) else { return }
+                whenTime = DayStamp.at(hour: 9, on: when)
+            }
+            .onChange(of: deadlineTimeOn) { _, on in
+                guard on, DayStamp.isDateOnly(deadlineTime, accountTimeZone: model.user?.timezone) else { return }
+                deadlineTime = DayStamp.at(hour: 9, on: deadline)
+            }
         }
     }
 
-    private func labeled<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(palette.muted)
+    private func card<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
             content()
         }
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(palette.border))
+    }
+
+    private var divider: some View {
+        Rectangle().fill(palette.border).frame(height: 1)
+    }
+
+    private func detailRow<Control: View>(_ label: String, @ViewBuilder control: () -> Control) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            Text(label).foregroundStyle(palette.muted)
+            Spacer(minLength: 12)
+            control()
+        }
+        .font(.subheadline)
     }
 
     private var bucketName: String {
@@ -493,9 +582,17 @@ struct TaskDetailSheet: View {
         notes = task.notes ?? ""
         estimate = task.estimateMinutes.map(String.init) ?? ""
         waiting = task.waitingOn ?? ""
+        if let raw = task.attentionDate, let parsed = ISO8601.date(raw) {
+            whenOn = true
+            when = parsed
+            whenTime = parsed
+            timeOn = !DayStamp.isDateOnly(parsed, accountTimeZone: model.user?.timezone)
+        }
         if let raw = task.hardDeadline, let parsed = ISO8601.date(raw) {
             deadlineOn = true
             deadline = parsed
+            deadlineTime = parsed
+            deadlineTimeOn = !DayStamp.isDateOnly(parsed, accountTimeZone: model.user?.timezone)
         }
         importance = task.importance
         effort = task.effort?.rawValue ?? ""
@@ -523,6 +620,7 @@ struct TaskDetailSheet: View {
             let effort: String?
             let bucketId: String?
             let waitingOn: String?
+            let attentionDate: String?
             let hardDeadline: String?
             let deadlineSource: String?
         }
@@ -534,7 +632,8 @@ struct TaskDetailSheet: View {
             effort: effort.isEmpty ? nil : effort,
             bucketId: bucketId.isEmpty ? nil : bucketId,
             waitingOn: waiting.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : waiting.trimmingCharacters(in: .whitespacesAndNewlines),
-            hardDeadline: deadlineOn ? ISO8601.string(deadline) : nil,
+            attentionDate: whenOn ? ISO8601.string(DayStamp.combine(day: when, time: timeOn ? whenTime : nil)) : nil,
+            hardDeadline: deadlineOn ? ISO8601.string(DayStamp.combine(day: deadline, time: deadlineTimeOn ? deadlineTime : nil)) : nil,
             deadlineSource: deadlineOn ? "explicit" : nil
         )
         let _: TaskItem? = try? await model.api.patch("tasks/\(task.id)", body: body)

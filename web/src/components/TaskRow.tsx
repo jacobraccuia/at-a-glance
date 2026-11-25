@@ -116,11 +116,8 @@ export function TaskRow({
               {stamp && <span className="task-stamp">{stamp}</span>}
               <div className="task-meta">
                 {showBucket && task.bucket && <span className="pill" style={{ borderColor: task.bucket.color ?? undefined }}>{task.bucket.name}</span>}
-                {task.hardDeadline && (
-                  <span className="pill deadline">Due {dueWhen(task.hardDeadline)}</span>
-                )}
-                {!task.hardDeadline && task.attentionDate && clockLabel(task.attentionDate) && (
-                  <span className="pill">{clockLabel(task.attentionDate)}</span>
+                {(task.attentionDate || task.hardDeadline) && (
+                  <span className="pill deadline">{whenLabel(task)}</span>
                 )}
                 {task.importance === "high" && <span className="pill importance-high">Important</span>}
                 {task.effort === "low" && <span className="pill">Low effort</span>}
@@ -159,9 +156,11 @@ function clockLabel(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
-function dueWhen(iso: string): string {
-  const date = new Date(iso);
-  const day = date.toLocaleDateString();
+function whenLabel(task: Task): string {
+  const iso = task.attentionDate || task.hardDeadline;
+  if (!iso) return "";
+  const day = new Date(iso).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
   const time = clockLabel(iso);
-  return time ? `${day} ${time}` : day;
+  const text = time ? `${day} ${time}` : day;
+  return task.attentionDate ? text : `Due ${text}`;
 }

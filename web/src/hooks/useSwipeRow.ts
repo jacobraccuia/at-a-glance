@@ -12,16 +12,16 @@ import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 
 export type SwipeStage = "none" | "left" | "right-near" | "right-mid" | "right-far";
 
-const LEFT_THRESHOLD = 140;
-const RIGHT_NEAR_THRESHOLD = 140;
-const RIGHT_FAR_THRESHOLD = 240;
+const LEFT_THRESHOLD = 200;
+const RIGHT_NEAR_THRESHOLD = 200;
+const RIGHT_FAR_THRESHOLD = 300;
 const RIGHT_MID_THRESHOLD = 150;
 const RIGHT_FAR_3_THRESHOLD = 230;
 const MAX_DRAG = 280;
 const MAX_DRAG_3 = 300;
 // A touch/mouse move smaller than this (in either axis) doesn't yet commit
 // to being a horizontal swipe vs. a vertical page scroll.
-const AXIS_LOCK_DISTANCE = 14;
+const AXIS_LOCK_DISTANCE = 24;
 
 function stageFor(x: number, zones: 2 | 3): SwipeStage {
   if (x <= -LEFT_THRESHOLD) return "left";
@@ -87,7 +87,7 @@ export function useSwipeRow({
     if (axis.current === "none") {
       if (Math.abs(dx) < AXIS_LOCK_DISTANCE && Math.abs(dy) < AXIS_LOCK_DISTANCE) return;
       // Vertical scroll wins unless the move is clearly sideways.
-      axis.current = Math.abs(dx) > Math.abs(dy) * 1.6 ? "horizontal" : "vertical";
+      axis.current = Math.abs(dx) > Math.abs(dy) * 2.2 ? "horizontal" : "vertical";
     }
     if (axis.current === "vertical") return;
     e.preventDefault();

@@ -7,6 +7,7 @@ export interface TaskDetailsValue {
   bucketId: string; // "" = no bucket
   importance: Importance;
   effort: "" | Effort;
+  when: string; // datetime-local, "" = no day
   deadline: string; // datetime-local input value, "" = none
   estimateMinutes: string; // raw input string, "" = none
   waitingOn: string;
@@ -17,6 +18,7 @@ export const emptyTaskDetails: TaskDetailsValue = {
   bucketId: "",
   importance: "medium",
   effort: "",
+  when: "",
   deadline: "",
   estimateMinutes: "",
   waitingOn: "",
@@ -56,6 +58,10 @@ export function TaskDetailsFields({ value, onChange, buckets }: Props) {
           <option value="medium">Medium</option>
           <option value="high">High</option>
         </select>
+      </label>
+      <label>
+        When
+        <input type="datetime-local" value={value.when} onChange={(e) => set("when", e.target.value)} />
       </label>
       <label>
         Hard deadline (optional)

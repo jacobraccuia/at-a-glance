@@ -215,7 +215,7 @@ export function TaskBoard({ initialView = "all", focusTaskId }: Props) {
   const horizonGroups = HORIZON_STACKS.map((group) => ({
     ...group,
     tasks: pending.filter((task) => taskPlace(task, zone) === group.id),
-  })).filter((group) => group.tasks.length > 0);
+  })).filter((group) => group.tasks.length > 0 || group.id === "tomorrow");
   const tomorrowPending = tomorrowTasks.filter((task) => task.status === "active" && inSpot(task.bucketId));
   const tomorrowPendingOccurrences = tomorrowOccurrences.filter(
     (item) => item.status === "pending" && inSpot(item.task?.bucketId),
@@ -367,6 +367,7 @@ export function TaskBoard({ initialView = "all", focusTaskId }: Props) {
         horizonGroups.map((group) => (
           <section key={group.id} className="horizon-stack">
             <h2>{group.label}</h2>
+            {group.tasks.length === 0 && <p className="muted">Nothing for tomorrow.</p>}
             <ul className="task-list">
               {group.tasks.map((t) => (
                 <TaskRow
@@ -421,7 +422,7 @@ export function TaskBoard({ initialView = "all", focusTaskId }: Props) {
         ))}
       </ul>
       )}
-      {!loading &&
+      {view !== "all" && !loading &&
         pending.length === 0 &&
         pendingOccurrences.length === 0 &&
         completed.length === 0 &&

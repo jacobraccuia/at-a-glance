@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { primeTalkAudio } from "../hooks/useAssistantTts";
 import { useVoiceSession } from "../voice/VoiceSessionContext";
@@ -10,7 +10,7 @@ import { LiveSheet } from "./LiveSheet";
 // Account lives on the profile icon, not in the tab bar.
 const NAV_ITEMS = [
   {
-    to: "/",
+    to: "/today",
     label: "Today",
     end: true,
     icon: (
@@ -35,7 +35,6 @@ const NAV_ITEMS = [
 export function Layout() {
   const { user } = useAuth();
   const { open, toggleSession } = useVoiceSession();
-  const location = useLocation();
 
   return (
     <div className="app-shell">
@@ -48,7 +47,7 @@ export function Layout() {
         <Outlet />
       </main>
       <nav className="bottom-nav" aria-label="Task views">
-        <NavLink to="/" end className={() => (location.pathname === "/" && !location.search ? "active" : "")} aria-label="Today">
+        <NavLink to="/today" className={({ isActive }) => (isActive ? "active" : "")} aria-label="Today">
           {NAV_ITEMS[0].icon}
         </NavLink>
         <button
