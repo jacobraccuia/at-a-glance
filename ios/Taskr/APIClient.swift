@@ -47,6 +47,14 @@ final class APIClient {
         try await send("PATCH", path: path, body: body)
     }
 
+    func delete(_ path: String) async throws {
+        var request = URLRequest(url: url(path))
+        request.httpMethod = "DELETE"
+        let (data, response) = try await session.data(for: request)
+        try check(response, data: data, allowEmpty: true)
+        SessionShare.persist()
+    }
+
     func data(_ path: String, json: any Encodable) async throws -> Data {
         var request = URLRequest(url: url(path))
         request.httpMethod = "POST"

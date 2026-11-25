@@ -4,6 +4,7 @@ import { primeTalkAudio } from "../hooks/useAssistantTts";
 import { useVoiceSession } from "../voice/VoiceSessionContext";
 import { MicIcon } from "./icons";
 import { VoiceSheet } from "./VoiceSheet";
+import { LiveSheet } from "./LiveSheet";
 
 // Today is the day. Talk stays the big center button. All is the other list.
 // Account lives on the profile icon, not in the tab bar.
@@ -88,6 +89,7 @@ export function Layout() {
         </NavLink>
       </nav>
       <VoiceSheet />
+      <LiveSheet />
     </div>
   );
 }

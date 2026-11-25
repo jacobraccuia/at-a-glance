@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type PointerEvent } from "react";
 import { api } from "../api/client";
-import { branding } from "../config/branding";
 import { useAssistantTts } from "../hooks/useAssistantTts";
 import { DEFAULT_SILENCE_MS, useConversationMic } from "../hooks/useConversationMic";
 import { useVoiceSession } from "../voice/VoiceSessionContext";
@@ -44,7 +43,8 @@ interface Conversation {
  * The transcript stays up afterward — swipe or ✕ to leave.
  */
 export function VoiceSheet() {
-  const { open, closeSession } = useVoiceSession();
+  const { mode, closeSession } = useVoiceSession();
+  const open = mode === "quick";
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
@@ -62,6 +62,7 @@ export function VoiceSheet() {
   const dragYRef = useRef(0);
   const [dragY, setDragY] = useState(0);
   const [draggingSheet, setDraggingSheet] = useState(false);
+  const [name, setName] = useState("Puck");
 
   const { speaking: ttsSpeaking, speak: ttsSpeak, stop: ttsStop } = useAssistantTts(open);
 
@@ -157,9 +158,8 @@ export function VoiceSheet() {
       }
 
       if (replyText) {
-        const line = replyText;
-        await ttsSpeak(line, { onStart: (ms) => revealSpoken(line, ms) });
-        showThread();
+        setFace("thread");
+        void ttsSpeak(replyText);
       }
     },
     [clearReveal, conversationId, revealSpoken, showThread, ttsSpeak, ttsStop],
@@ -197,6 +197,15 @@ export function VoiceSheet() {
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoaded(true));
+    Promise.all([
+      api.get<Array<{ id: string; name: string }>>("/assistant/personalities"),
+      api.get<{ personalityId?: string }>("/auth/me"),
+    ])
+      .then(([people, me]) => {
+        const picked = people.find((person) => person.id === me.personalityId)?.name;
+        if (picked) setName(picked);
+      })
+      .catch(() => undefined);
   }, [open]);
 
   useEffect(() => {
@@ -260,6 +269,7 @@ export function VoiceSheet() {
 
   function onSheetPointerDown(e: PointerEvent<HTMLElement>) {
     if (e.pointerType === "mouse" && e.button !== 0) return;
+    if ((e.target as HTMLElement).closest("button")) return;
     dragStartY.current = e.clientY;
     dragYRef.current = 0;
     setDraggingSheet(true);
@@ -324,7 +334,7 @@ export function VoiceSheet() {
   const liveLine = ttsSpeaking || caption ? caption : partial;
 
   return (
-    <div className="voice-sheet-root" role="dialog" aria-modal="true" aria-label={`Talk to ${branding.assistantName}`}>
+    <div className="voice-sheet-root" role="dialog" aria-modal="true" aria-label={`Talk to ${name}`}>
       <button type="button" className="voice-sheet-backdrop" aria-label="Close conversation" onClick={closeSession} />
       <div
         className={`voice-sheet${draggingSheet ? " dragging" : ""}`}
@@ -340,7 +350,7 @@ export function VoiceSheet() {
           <div className="voice-sheet-grab" aria-hidden />
           <div className="voice-sheet-title-row">
             <div>
-              <h2>{branding.assistantName}</h2>
+              <h2>{name}</h2>
               {face === "thread" && <p className="voice-sheet-status">{statusLabel}</p>}
             </div>
             <div className="voice-sheet-actions">

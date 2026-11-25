@@ -10,6 +10,8 @@ import type { AssistantAction, AssistantPlan, CaptureItem } from "./conversation
 import { DEFAULT_EASY_WIN_MINUTES, formatEasyWinsSummary, rankEasyWins, type EasyWin } from "./easyWins.js";
 import { classifyTask, horizonLabel, horizonWindows, type HorizonName } from "../horizons.js";
 import { matchLesson } from "./bucketLessons.js";
+import { resolveTaskQuery } from "./resolveTask.js";
+import { completeTask, setHorizon, snoozeTask, taskIdsDoneToday } from "../tasks/service.js";
 
 export interface ExecutedAction {
   type: string;
@@ -79,44 +81,7 @@ interface ExecContext {
   weekStartsOn?: number;
 }
 
-function normalize(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
-}
-
-/**
- * Resolve a free-text task reference against a candidate list.
- * Returns the single best match, or null if zero / ambiguous.
- */
-export function resolveTaskQuery(query: string, candidates: Task[]): Task | null {
-  const q = normalize(query);
-  if (!q) return null;
-
-  const scored = candidates
-    .map((t) => {
-      const title = normalize(t.title);
-      let score = 0;
-      if (title === q) score = 100;
-      else if (title.includes(q)) score = 80;
-      else if (q.includes(title) && title.length >= 4) score = 70;
-      else {
-        // Token overlap: every query token present in the title.
-        const qTokens = q.split(" ").filter((tok) => tok.length > 2);
-        if (qTokens.length === 0) return { t, score: 0 };
-        const hits = qTokens.filter((tok) => title.includes(tok)).length;
-        score = (hits / qTokens.length) * 60;
-      }
-      return { t, score };
-    })
-    .filter((x) => x.score >= 40)
-    .sort((a, b) => b.score - a.score);
-
-  if (scored.length === 0) return null;
-  // Ambiguous if the top two are close.
-  if (scored.length >= 2 && scored[0].score - scored[1].score < 15 && scored[1].score >= 50) {
-    return null;
-  }
-  return scored[0].t;
-}
+export { resolveTaskQuery } from "./resolveTask.js";
 
 async function loadOpenTasks(prisma: PrismaClient, userId: string): Promise<Task[]> {
   return prisma.task.findMany({
@@ -297,7 +262,11 @@ async function runAction(action: AssistantAction, ctx: ExecContext, openTasks: T
 
     case "easy_wins": {
       const minutes = action.minutes ?? DEFAULT_EASY_WIN_MINUTES;
-      const wins = rankEasyWins(openTasks, minutes);
+      const doneToday = await taskIdsDoneToday(ctx.userId, ctx.tz);
+      const wins = rankEasyWins(
+        openTasks.filter((task) => !doneToday.has(task.id)),
+        minutes
+      );
       return [
         {
           type: "easy_wins",
@@ -399,19 +368,18 @@ async function runAction(action: AssistantAction, ctx: ExecContext, openTasks: T
       }
 
       if (action.type === "complete") {
-        const updated = await ctx.prisma.task.update({
-          where: { id: match.id },
-          data: { status: "completed", completedAt: new Date() },
-        });
-        await logTaskEvent(ctx.prisma, { taskId: match.id, userId: ctx.userId, type: "completed", payload: { via: "assistant" } });
+        const result = await completeTask(ctx.userId, match.id, "occurrence");
+        if (!result.ok) {
+          return [{ type: "complete", ok: false, summary: result.error }];
+        }
         return [
           {
             type: "complete",
             ok: true,
-            summary: `Marked "${updated.title}" done`,
-            taskId: updated.id,
-            taskTitle: updated.title,
-            undo: { kind: "complete", taskId: updated.id },
+            summary: result.summary,
+            taskId: result.taskId,
+            taskTitle: result.taskTitle,
+            undo: result.undo,
           },
         ];
       }
@@ -435,26 +403,19 @@ async function runAction(action: AssistantAction, ctx: ExecContext, openTasks: T
       }
 
       if (action.type === "snooze") {
-        const until = new Date();
-        until.setDate(until.getDate() + action.daysFromNow);
-        const updated = await ctx.prisma.task.update({
-          where: { id: match.id },
-          data: { snoozedUntil: until },
-        });
-        await logTaskEvent(ctx.prisma, {
-          taskId: match.id,
-          userId: ctx.userId,
-          type: "snoozed",
-          payload: { via: "assistant", until: until.toISOString() },
-        });
+        const day = addDaysToDateString(ctx.todayISO, action.daysFromNow);
+        const until = startOfDayInTimeZone(day, ctx.tz);
+        const result = await snoozeTask(ctx.userId, match.id, until);
+        if (!result.ok) return [{ type: "snooze", ok: false, summary: result.error }];
+        const when = action.daysFromNow === 1 ? "until tomorrow" : `for ${action.daysFromNow} days`;
         return [
           {
             type: "snooze",
             ok: true,
-            summary: `Snoozed "${updated.title}" ${action.daysFromNow === 1 ? "until tomorrow" : `for ${action.daysFromNow} days`}`,
-            taskId: updated.id,
-            taskTitle: updated.title,
-            undo: { kind: "snooze", taskId: updated.id },
+            summary: `Snoozed "${result.taskTitle}" ${when}`,
+            taskId: result.taskId,
+            taskTitle: result.taskTitle,
+            undo: result.undo,
           },
         ];
       }
@@ -477,24 +438,15 @@ async function runAction(action: AssistantAction, ctx: ExecContext, openTasks: T
         ];
       }
 
-      // add_to_today
-      const updated = await ctx.prisma.task.update({
-        where: { id: match.id },
-        data: { status: "active", attentionDate: new Date(), snoozedUntil: null },
-      });
-      await logTaskEvent(ctx.prisma, {
-        taskId: match.id,
-        userId: ctx.userId,
-        type: "updated",
-        payload: { via: "assistant", attentionDate: "today" },
-      });
+      const moved = await setHorizon(ctx.userId, match.id, "today");
+      if (!moved.ok) return [{ type: "add_to_today", ok: false, summary: moved.error }];
       return [
         {
           type: "add_to_today",
           ok: true,
-          summary: `Moved "${updated.title}" to Today`,
-          taskId: updated.id,
-          taskTitle: updated.title,
+          summary: `Moved "${moved.taskTitle}" to Today`,
+          taskId: moved.taskId,
+          taskTitle: moved.taskTitle,
         },
       ];
     }
@@ -559,6 +511,13 @@ export async function executeAssistantPlan(plan: AssistantPlan, ctx: ExecContext
  * (easy wins / what's on today) so the home surface still helps without
  * an API key; otherwise treats the message as a capture dump.
  */
+/** Greetings and acknowledgements. Not a task. */
+export function isChatter(text: string): boolean {
+  return /^(hi|hello|hey|hiya|yo|sup|thanks|thank you|ok|okay|k|cool|bye|goodbye|good morning|good afternoon|good night|how are you|what's up|whats up|nothing|never mind|nm|lol|haha)[.!?]*$/i.test(
+    text.trim(),
+  );
+}
+
 export function fallbackPlanFromText(text: string): AssistantPlan {
   const lower = text.toLowerCase();
 
@@ -617,6 +576,10 @@ export function fallbackPlanFromText(text: string): AssistantPlan {
         },
       ],
     };
+  }
+
+  if (isChatter(text)) {
+    return { reply: "Hey.", spoken: "Hey.", actions: [{ type: "none" }] };
   }
 
   const lines = text

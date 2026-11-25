@@ -126,3 +126,12 @@ docker-compose.yml         Local Postgres for development
   *suggests* structured fields; the server always decides what's actually
   written to the database, and AI-set dates are never marked as explicit
   deadlines.
+- Conversational Talk uses GPT-Live (`gpt-live-1.1`) when the key is set.
+  Audio goes to OpenAI. The key stays on the server. Quick talk and typed
+  quick capture still work without a live session. Closing the sheet ends
+  the call.
+- iOS links WebRTC 158.0.0 from `ios/Vendor/WebRTC` (checksum
+  `dd26ba28fb9c8dbc82f4be3085e8d112a4e2a4e654e1786a9977a748c24c4912`).
+  The xcframework stays local. Fetch the release zip from
+  `https://github.com/stasel/WebRTC/releases/download/158.0.0/WebRTC-M158.xcframework.zip`
+  and unzip it next to `Package.swift`.

@@ -16,12 +16,12 @@ import {
 import { parseMultiCaptureText, type CaptureIntent } from "../lib/assistant/intentParser.js";
 import { bucketIdsByName } from "../lib/bucketFilter.js";
 import {
-  attentionInstant,
   classifyDateString,
   classifyTask,
   horizonWindows,
   type HorizonName,
 } from "../lib/horizons.js";
+import { completeTask, dropTask, reopenTask, setHorizon, snoozeTask } from "../lib/tasks/service.js";
 
 export const tasksRouter = Router();
 tasksRouter.use(requireAuth);
@@ -501,18 +501,9 @@ tasksRouter.patch("/:id", async (req, res) => {
 // ---------- Lifecycle actions ----------
 
 tasksRouter.post("/:id/complete", async (req, res) => {
-  const userId = req.session.userId!;
-  const task = await prisma.task.findFirst({ where: { id: req.params.id, userId } });
-  if (!task) return res.status(404).json({ error: "Task not found" });
-  if (task.recurrenceRuleId) {
-    return res.status(400).json({ error: "Recurring tasks are completed per-occurrence. Use /occurrences/:occurrenceId/complete" });
-  }
-  const updated = await prisma.task.update({
-    where: { id: task.id },
-    data: { status: "completed", completedAt: new Date() },
-  });
-  await logTaskEvent(prisma, { taskId: task.id, userId, type: "completed" });
-  res.json(updated);
+  const result = await completeTask(req.session.userId!, req.params.id, "refuse-recurring");
+  if (!result.ok) return res.status(result.status).json({ error: result.error });
+  res.json(result.httpBody);
 });
 
 tasksRouter.post("/:id/undo", async (req, res) => {
@@ -533,66 +524,30 @@ const horizonSchema = z.object({
 tasksRouter.post("/:id/horizon", async (req, res) => {
   const parsed = horizonSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-  const userId = req.session.userId!;
-  const task = await prisma.task.findFirst({ where: { id: req.params.id, userId } });
-  if (!task) return res.status(404).json({ error: "Task not found" });
-  const clock = await getUserClock(userId);
-  const windows = horizonWindows(getCurrentDateInTimeZone(clock.tz), clock.tz, clock.weekStartsOn);
-  const horizon = parsed.data.horizon;
-  const updated = await prisma.task.update({
-    where: { id: task.id },
-    data:
-      horizon === "later"
-        ? { status: task.hardDeadline ? "active" : "captured", attentionDate: null, snoozedUntil: null }
-        : { status: "active", attentionDate: attentionInstant(horizon, windows), snoozedUntil: null },
-  });
-  await logTaskEvent(prisma, {
-    taskId: task.id,
-    userId,
-    type: "updated",
-    payload: { horizon },
-  });
-  res.json({ ...updated, horizon: classifyTask(updated, windows) });
+  const result = await setHorizon(req.session.userId!, req.params.id, parsed.data.horizon);
+  if (!result.ok) return res.status(result.status).json({ error: result.error });
+  res.json(result.httpBody);
 });
 
 const snoozeSchema = z.object({ until: z.string().datetime() });
 tasksRouter.post("/:id/snooze", async (req, res) => {
   const parsed = snoozeSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-  const userId = req.session.userId!;
-  const task = await prisma.task.findFirst({ where: { id: req.params.id, userId } });
-  if (!task) return res.status(404).json({ error: "Task not found" });
-  // Snoozing never alters hardDeadline -- only snoozedUntil changes.
-  const updated = await prisma.task.update({
-    where: { id: task.id },
-    data: { snoozedUntil: new Date(parsed.data.until) },
-  });
-  await logTaskEvent(prisma, { taskId: task.id, userId, type: "snoozed", payload: { until: parsed.data.until } });
-  res.json(updated);
+  const result = await snoozeTask(req.session.userId!, req.params.id, new Date(parsed.data.until));
+  if (!result.ok) return res.status(result.status).json({ error: result.error });
+  res.json(result.httpBody);
 });
 
 tasksRouter.post("/:id/drop", async (req, res) => {
-  const userId = req.session.userId!;
-  const task = await prisma.task.findFirst({ where: { id: req.params.id, userId } });
-  if (!task) return res.status(404).json({ error: "Task not found" });
-  const updated = await prisma.task.update({
-    where: { id: task.id },
-    data: { status: "dropped", droppedAt: new Date() },
-  });
-  await logTaskEvent(prisma, { taskId: task.id, userId, type: "dropped" });
-  res.json(updated);
+  const result = await dropTask(req.session.userId!, req.params.id);
+  if (!result.ok) return res.status(result.status).json({ error: result.error });
+  res.json(result.httpBody);
 });
 
 tasksRouter.post("/:id/reopen", async (req, res) => {
-  const userId = req.session.userId!;
-  const task = await prisma.task.findFirst({ where: { id: req.params.id, userId } });
-  if (!task) return res.status(404).json({ error: "Task not found" });
-  const updated = await prisma.task.update({
-    where: { id: task.id },
-    data: { status: "active", droppedAt: null, completedAt: null },
-  });
-  await logTaskEvent(prisma, { taskId: task.id, userId, type: "reopened" });
-  res.json(updated);
+  const result = await reopenTask(req.session.userId!, req.params.id);
+  if (!result.ok) return res.status(result.status).json({ error: result.error });
+  res.json(result.httpBody);
 });
 
 // ---------- Occurrence completion (recurring tasks) ----------

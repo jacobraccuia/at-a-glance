@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import request from "supertest";
 import { createApp } from "../src/index.js";
 import { prisma } from "../src/db/client.js";
+import { executeTool } from "../src/lib/assistant/live/tools.js";
 import * as intentParser from "../src/lib/assistant/intentParser.js";
 import * as conversationParser from "../src/lib/assistant/conversationParser.js";
 
@@ -449,6 +450,91 @@ describe("Phase 1 core flows", () => {
   it("rejects unauthenticated access", async () => {
     const res = await request(app).get("/api/tasks?view=all");
     expect(res.status).toBe(401);
+  });
+
+  it("keeps quick talk off the live conversation and stores editable memory", async () => {
+    const personalities = await agent.get("/api/assistant/personalities");
+    expect(personalities.status).toBe(200);
+    expect(personalities.body.map((row: { id: string }) => row.id)).toContain("logos");
+
+    const chosen = await agent.patch("/api/assistant/personality").send({ id: "logos" });
+    expect(chosen.status).toBe(200);
+    expect(chosen.body.personalityId).toBe("logos");
+
+    const memory = await agent.post("/api/assistant/memory").send({
+      kind: "preference",
+      text: "I like short answers",
+      source: "stated",
+    });
+    expect(memory.status).toBe(201);
+    const rejected = await agent.post("/api/assistant/memory").send({
+      kind: "pattern",
+      text: "The dishes task is completed",
+      source: "inferred",
+    });
+    expect(rejected.status).toBe(400);
+
+    const listed = await agent.get("/api/assistant/memory");
+    expect(listed.body).toHaveLength(1);
+
+    const removed = await agent.delete(`/api/assistant/memory/${memory.body.id}`);
+    expect(removed.status).toBe(204);
+
+    const previous = process.env.OPENAI_API_KEY;
+    process.env.OPENAI_API_KEY = "";
+    try {
+      const live = await agent.post("/api/assistant/live/sessions").send({ sdp: "v=0" });
+      expect(live.status).toBe(503);
+      const typed = await agent.post("/api/assistant/live/text").send({ text: "Maybe I should write a book someday" });
+      expect(typed.status).toBe(201);
+      expect(typed.body.tasksChanged).toBe(false);
+      expect(typed.body.message.content).toMatch(/Nothing was added/);
+    } finally {
+      if (previous === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = previous;
+    }
+
+    const tasks = await agent.get("/api/tasks?view=all");
+    expect(tasks.body.find((task: { title: string }) => /write a book/i.test(task.title))).toBeFalsy();
+  });
+
+  it("runs live tools through the shared task service", async () => {
+    const user = await prisma.user.findUniqueOrThrow({ where: { email: testEmail } });
+    const idea = await executeTool(user.id, "create_task", JSON.stringify({ title: "Maybe I should write a book someday" }));
+    expect(idea.ok).toBe(false);
+    expect(idea.changed).toBe(false);
+
+    const created = await executeTool(
+      user.id,
+      "create_task",
+      JSON.stringify({ title: "Wash the live dishes", horizon: "today" }),
+    );
+    expect(created.ok).toBe(true);
+    expect(created.changed).toBe(true);
+
+    const listed = await executeTool(user.id, "list_tasks", JSON.stringify({ horizon: "today" }));
+    expect(JSON.stringify(listed.tasks)).toMatch(/Wash the live dishes/);
+
+    const missed = await executeTool(user.id, "complete_task", JSON.stringify({ query: "zzz-no-such-task" }));
+    expect(missed.ok).toBe(false);
+    expect(missed.changed).toBe(false);
+
+    const done = await executeTool(user.id, "complete_task", JSON.stringify({ query: "Wash the live dishes" }));
+    expect(done.ok).toBe(true);
+    expect(done.changed).toBe(true);
+
+    const parked = await executeTool(user.id, "create_task", JSON.stringify({ title: "Return the live charger" }));
+    expect(parked.changed).toBe(true);
+    const ask = await executeTool(user.id, "drop_task", JSON.stringify({ query: "Return the live charger" }));
+    expect(ask.confirmation_required).toBe(true);
+    expect(ask.changed).toBe(false);
+    const stillThere = await prisma.task.findFirst({ where: { userId: user.id, title: "Return the live charger", droppedAt: null } });
+    expect(stillThere).toBeTruthy();
+    const dropped = await executeTool(user.id, "drop_task", JSON.stringify({ confirmationToken: ask.confirmationToken }));
+    expect(dropped.ok).toBe(true);
+    expect(dropped.changed).toBe(true);
+    const gone = await prisma.task.findFirst({ where: { userId: user.id, title: "Return the live charger" } });
+    expect(gone?.droppedAt).toBeTruthy();
   });
 });
 

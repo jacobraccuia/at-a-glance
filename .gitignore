@@ -9,3 +9,4 @@ coverage/
 .vscode/
 *.tsbuildinfo
 xcuserdata/
+ios/Vendor/WebRTC/WebRTC.xcframework/

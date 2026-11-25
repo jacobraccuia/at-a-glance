@@ -109,6 +109,37 @@ marked completed).
 - `TaskOccurrence(taskId, occurrenceDate)` unique
 - `TaskEvent(taskId, createdAt)`
 
+## Conversational assistant
+
+These rows are live. Audio is not stored.
+
+### UserPreferences (added)
+- `personalityId` (default `puck`)
+
+### AssistantConversation
+- `mode` (`quick` | `conversation`)
+- `personalityId`
+- `title`, `summary` (nullable)
+- `endedAt` (nullable)
+- messages stay on `AssistantMessage` (`role`, `content`, `actions`, `channel` `text` | `voice`)
+
+### ConversationSummary
+- one current row per conversation
+- decisions, unresolved topics, commitments, carry-forward note, model id
+
+### PersonalMemory
+- `kind`, `text`, `source` (`stated` | `inferred`), `status` (`active` | `rejected`)
+- user can edit or delete. Delete-all is separate from deleting a conversation.
+- cascades from User
+
+### LiveSession
+- provider session id, conversation, personality, status, `changeSeq`
+- binds the OpenAI session to the user. Sideband uses that row.
+
+### LiveUsage
+- seconds, active seconds, paused seconds, backend token counts, `estimatedUsd`, `finalized`
+- month-to-date sum drives the soft $25 warning. No hard cutoff.
+
 ## Timezone/DST handling
 `UserPreferences.timezone` is authoritative for computing "today" and
 generating occurrence dates. Occurrence generation runs in the user's

@@ -3,11 +3,10 @@
 ## Overview
 
 "Taskr" is an adaptive personal assistant that reduces the cognitive load
-of tracking commitments. Phase 1 scope (this document reflects Phase 1 + future
-hooks): a REST API backend backed by PostgreSQL, with a minimal web client used
-for development and daily-driving the app until the native iOS client (Phase 3)
-exists. Assistant/AI, calendar, and open-loop/connector features are deliberately
-deferred to later phases per `CURSOR_MASTER_PROMPT.md`.
+of tracking commitments. The API is Node, Express, Postgres, and Prisma.
+The web client and the SwiftUI iPhone app share it. Quick capture and the
+older Talk sheet stay. A separate GPT-Live conversation can read and change
+tasks only through server-side tools.
 
 ## Stack decision (confirmed with product owner 2026-10-11)
 

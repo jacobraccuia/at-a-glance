@@ -22,15 +22,26 @@ model User {
   taskEvents    TaskEvent[]
   conversations AssistantConversation[]
   lessons       BucketLesson[]
+  memories      PersonalMemory[]
+  liveSessions  LiveSession[]
+  liveUsages    LiveUsage[]
 }
 
 model AssistantConversation {
-  id        String             @id @default(uuid())
-  userId    String
-  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
-  messages  AssistantMessage[]
+  id            String             @id @default(uuid())
+  userId        String
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// "quick" is the older Talk capture. "conversation" is the live assistant.
+  mode          String             @default("quick")
+  personalityId String             @default("puck")
+  title         String?
+  summary       String?
+  endedAt       DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  messages      AssistantMessage[]
+  summaryRow    ConversationSummary?
+  liveSessions  LiveSession[]
 
   @@index([userId, updatedAt])
 }
@@ -43,6 +54,8 @@ model AssistantMessage {
   content        String
   /// Structured record of what the assistant did (or asked) for this turn.
   actions        Json?
+  /// "text" or "voice".
+  channel        String               @default("text")
   createdAt      DateTime             @default(now())
 
   @@index([conversationId, createdAt])
@@ -52,8 +65,9 @@ model UserPreferences {
   id           String   @id @default(uuid())
   userId       String   @unique
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  timezone     String   @default("UTC")
-  weekStartsOn Int      @default(0)
+  timezone      String   @default("UTC")
+  weekStartsOn  Int      @default(0)
+  personalityId String   @default("puck")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
@@ -245,4 +259,67 @@ model TaskEvent {
   createdAt DateTime      @default(now())
 
   @@index([taskId, createdAt])
+}
+
+model ConversationSummary {
+  id             String                @id @default(uuid())
+  conversationId String                @unique
+  conversation   AssistantConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  decisions      String                @default("")
+  unresolved     String                @default("")
+  commitments    String                @default("")
+  carryForward   String                @default("")
+  modelId        String?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+}
+
+model PersonalMemory {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      String
+  text      String
+  source    String
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, status])
+}
+
+model LiveSession {
+  id                String                @id @default(uuid())
+  userId            String
+  user              User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversationId    String
+  conversation      AssistantConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  providerSessionId String                @unique
+  personalityId     String
+  status            String                @default("open")
+  changeSeq         Int                   @default(0)
+  createdAt         DateTime              @default(now())
+  closedAt          DateTime?
+  usage             LiveUsage?
+
+  @@index([userId, createdAt])
+}
+
+model LiveUsage {
+  id                  String      @id @default(uuid())
+  liveSessionId       String      @unique
+  liveSession         LiveSession @relation(fields: [liveSessionId], references: [id], onDelete: Cascade)
+  userId              String
+  user                User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  seconds             Int         @default(0)
+  activeSeconds       Int         @default(0)
+  pausedSeconds       Int         @default(0)
+  backendInputTokens  Int         @default(0)
+  backendOutputTokens Int         @default(0)
+  estimatedUsd        Float       @default(0)
+  finalized           Boolean     @default(false)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  @@index([userId, createdAt])
 }

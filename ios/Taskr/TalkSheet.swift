@@ -2,6 +2,15 @@ import AVFoundation
 import Speech
 import SwiftUI
 
+private struct TalkPersonality: Decodable {
+    let id: String
+    let name: String
+}
+
+private struct TalkMe: Decodable {
+    let personalityId: String?
+}
+
 struct TalkSheet: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.palette) private var palette
@@ -15,6 +24,7 @@ struct TalkSheet: View {
     @State private var sending = false
     @State private var error: String?
     @State private var dragY: CGFloat = 0
+    @State private var personalityName = "Puck"
 
     var body: some View {
         VStack(spacing: 0) {
@@ -22,7 +32,7 @@ struct TalkSheet: View {
                 .gesture(sheetDrag)
             HStack {
                 VStack(alignment: .leading) {
-                    Text(Branding.assistantName).font(.headline)
+                    Text(personalityName).font(.headline)
                     if face == "thread" {
                         Text(status).font(.caption).foregroundStyle(palette.muted)
                     }
@@ -161,6 +171,11 @@ struct TalkSheet: View {
             conversationId = conversation.id
             messages = conversation.messages.map {
                 ChatMessage(id: $0.id, role: $0.role, content: $0.content, actions: $0.actions)
+            }
+            let people: [TalkPersonality] = (try? await model.api.get("assistant/personalities")) ?? []
+            let me: TalkMe? = try? await model.api.get("auth/me")
+            if let id = me?.personalityId, let match = people.first(where: { $0.id == id }) {
+                personalityName = match.name
             }
         } catch {
             self.error = error.localizedDescription

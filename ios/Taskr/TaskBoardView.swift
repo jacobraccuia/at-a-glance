@@ -41,13 +41,11 @@ struct TaskBoardView: View {
             VStack(alignment: .leading, spacing: 12) {
                 titleRow
                 chipRow
-                    .gesture(bucketDrag)
                 bucketPager
                 if view == .today {
                     easyWins
                 }
                 capture
-                    .gesture(bucketDrag)
                 if filtersOpen { filters }
                 if let error {
                     Text(error).font(.footnote).foregroundStyle(palette.danger)
@@ -78,7 +76,21 @@ struct TaskBoardView: View {
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.bottom, 24)
+            .padding(.bottom, 8)
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            HStack(spacing: 8) {
+                switchChip(model.hideWork ? "Work hidden" : "Hide work", on: model.hideWork) {
+                    model.hideWork.toggle()
+                    syncTint()
+                }
+                switchChip(model.hideFinished ? "Finished hidden" : "Hide finished", on: model.hideFinished) {
+                    model.hideFinished.toggle()
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background(palette.bg.opacity(0.94))
         }
         .task(id: loadKey) { await reload() }
         .task(id: winsKey) { await reloadWins() }
@@ -164,19 +176,6 @@ struct TaskBoardView: View {
                 .disabled(pageIndex >= pages.count - 1)
                 .accessibilityLabel("Next bucket")
             }
-            HStack(spacing: 8) {
-                switchChip(model.hideWork ? "Work hidden" : "Hide work", on: model.hideWork) {
-                    model.hideWork.toggle()
-                    syncTint()
-                }
-                .accessibilityLabel(model.hideWork ? "Show work" : "Hide work")
-                .accessibilityHint("Leaves the Work bucket out of this switcher")
-                switchChip(model.hideFinished ? "Finished hidden" : "Hide finished", on: model.hideFinished) {
-                    model.hideFinished.toggle()
-                }
-                .accessibilityLabel(model.hideFinished ? "Show finished" : "Hide finished")
-                .accessibilityHint("Leaves completed tasks out of this list")
-            }
             if pages.count > 1 {
                 HStack(spacing: 6) {
                     ForEach(Array(pages.enumerated()), id: \.offset) { index, page in
@@ -208,14 +207,16 @@ struct TaskBoardView: View {
                 filtersOpen.toggle()
             } label: {
                 Image(systemName: "magnifyingglass")
-                    .frame(width: 36, height: 36)
+                    .font(.title2)
+                    .frame(width: 44, height: 44)
             }
             .accessibilityLabel("Search and filter")
             NavigationLink {
                 AccountView()
             } label: {
                 Image(systemName: "person.circle")
-                    .frame(width: 36, height: 36)
+                    .font(.title2)
+                    .frame(width: 44, height: 44)
             }
             .accessibilityLabel("Account")
         }

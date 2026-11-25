@@ -118,6 +118,11 @@ export function TaskBoard({ initialView = "all", focusTaskId }: Props) {
 
   useEffect(load, [load]);
   useEffect(() => {
+    const onTasks = () => load();
+    window.addEventListener("taskr-tasks-changed", onTasks);
+    return () => window.removeEventListener("taskr-tasks-changed", onTasks);
+  }, [load]);
+  useEffect(() => {
     api.get<Bucket[]>("/buckets").then(setBuckets).catch(() => undefined);
   }, []);
 
@@ -136,7 +141,7 @@ export function TaskBoard({ initialView = "all", focusTaskId }: Props) {
   const spotRef = useRef(spot);
   pagesRef.current = pages;
   spotRef.current = page.id;
-  const boardRef = useRef<HTMLDivElement>(null);
+  const pagerRef = useRef<HTMLDivElement>(null);
   const dragStart = useRef<{ x: number; y: number; id: number } | null>(null);
 
   function chooseSpot(id: string) {
@@ -181,7 +186,7 @@ export function TaskBoard({ initialView = "all", focusTaskId }: Props) {
   }, [page.color]);
 
   useEffect(() => {
-    const el = boardRef.current;
+    const el = pagerRef.current;
     if (!el) return;
     let acc = 0;
     let lockUntil = 0;
@@ -273,15 +278,7 @@ export function TaskBoard({ initialView = "all", focusTaskId }: Props) {
   const completedOccurrences = view === "today" && !hideFinished ? occurrences.filter((o) => o.status === "completed") : [];
 
   return (
-    <div
-      className="page task-board"
-      ref={boardRef}
-      onPointerDown={onBoardPointerDown}
-      onPointerUp={onBoardPointerUp}
-      onPointerCancel={() => {
-        dragStart.current = null;
-      }}
-    >
+    <div className="page task-board">
       <div className="board-title-row">
         <h1>{branding.appName}</h1>
         <div className="board-title-actions">
@@ -316,7 +313,16 @@ export function TaskBoard({ initialView = "all", focusTaskId }: Props) {
       </div>
 
       <div className="bucket-block">
-        <div className="bucket-pager" aria-label="Buckets">
+        <div
+          className="bucket-pager"
+          aria-label="Buckets"
+          ref={pagerRef}
+          onPointerDown={onBoardPointerDown}
+          onPointerUp={onBoardPointerUp}
+          onPointerCancel={() => {
+            dragStart.current = null;
+          }}
+        >
           <button type="button" className="bucket-pager-arrow" onClick={() => shiftSpot(-1)} disabled={pageIndex <= 0} aria-label="Previous bucket">
             ‹
           </button>
@@ -345,26 +351,6 @@ export function TaskBoard({ initialView = "all", focusTaskId }: Props) {
             aria-label="Next bucket"
           >
             ›
-          </button>
-        </div>
-        <div className="list-switches">
-          <button
-            type="button"
-            className={`view-chip hide-work${hideWork ? " active" : ""}`}
-            aria-pressed={hideWork}
-            title="Leaves the Work bucket out of this switcher"
-            onClick={toggleHideWork}
-          >
-            {hideWork ? "Work hidden" : "Hide work"}
-          </button>
-          <button
-            type="button"
-            className={`view-chip hide-work${hideFinished ? " active" : ""}`}
-            aria-pressed={hideFinished}
-            title="Leaves completed tasks out of this list"
-            onClick={toggleHideFinished}
-          >
-            {hideFinished ? "Finished hidden" : "Hide finished"}
           </button>
         </div>
       </div>
@@ -493,6 +479,26 @@ export function TaskBoard({ initialView = "all", focusTaskId }: Props) {
           </ul>
         </details>
       )}
+      <div className="list-switches">
+        <button
+          type="button"
+          className={`view-chip hide-work${hideWork ? " active" : ""}`}
+          aria-pressed={hideWork}
+          title="Leaves the Work bucket out of this switcher"
+          onClick={toggleHideWork}
+        >
+          {hideWork ? "Work hidden" : "Hide work"}
+        </button>
+        <button
+          type="button"
+          className={`view-chip hide-work${hideFinished ? " active" : ""}`}
+          aria-pressed={hideFinished}
+          title="Leaves completed tasks out of this list"
+          onClick={toggleHideFinished}
+        >
+          {hideFinished ? "Finished hidden" : "Hide finished"}
+        </button>
+      </div>
     </div>
   );
 }

@@ -101,5 +101,8 @@ authRouter.get("/me", async (req, res) => {
   if (!user) {
     return res.status(401).json({ error: "Not authenticated" });
   }
-  return res.json(publicUser(user, user.preferences?.timezone ?? "UTC"));
+  return res.json({
+    ...publicUser(user, user.preferences?.timezone ?? "UTC"),
+    personalityId: user.preferences?.personalityId ?? "puck",
+  });
 });

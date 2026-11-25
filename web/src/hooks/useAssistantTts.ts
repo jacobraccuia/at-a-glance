@@ -119,7 +119,7 @@ export function useAssistantTts(enabled: boolean) {
         if (gate.channel !== "none" || gen !== generationRef.current) return;
         gate.channel = "browser";
         browserDone = speakWithBrowser(text, onStart);
-      }, 420);
+      }, 0);
 
       try {
         const res = await fetch(`${API_BASE_URL}/assistant/speak`, {

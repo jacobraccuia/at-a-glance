@@ -147,4 +147,9 @@ describe("fallbackPlanFromText", () => {
     const plan = fallbackPlanFromText("buy oat milk");
     expect(plan.actions[0]?.type).toBe("create_tasks");
   });
+
+  it("does not turn a greeting into a task", () => {
+    const plan = fallbackPlanFromText("hello");
+    expect(plan.actions).toEqual([{ type: "none" }]);
+  });
 });

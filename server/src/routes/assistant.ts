@@ -11,15 +11,17 @@ import {
   startOfDayInTimeZone,
 } from "../lib/timezone.js";
 import { parseConversationMessage } from "../lib/assistant/conversationParser.js";
-import { executeAssistantPlan, fallbackPlanFromText } from "../lib/assistant/executor.js";
+import { executeAssistantPlan, fallbackPlanFromText, isChatter } from "../lib/assistant/executor.js";
 import { DEFAULT_EASY_WIN_MINUTES, rankEasyWins } from "../lib/assistant/easyWins.js";
 import { bucketIdsByName } from "../lib/bucketFilter.js";
 import { ensureDefaultBucket } from "../lib/defaultBucket.js";
 import { listBucketLessons } from "../lib/assistant/bucketLessons.js";
 import { synthesizeSpeech } from "../lib/assistant/tts.js";
+import { liveRouter } from "./live.js";
 
 export const assistantRouter = Router();
 assistantRouter.use(requireAuth);
+assistantRouter.use(liveRouter);
 
 async function getUserTimezone(userId: string): Promise<string> {
   const prefs = await prisma.userPreferences.findUnique({ where: { userId } });
@@ -33,7 +35,7 @@ async function getOrCreateConversation(userId: string, conversationId?: string) 
     });
     if (existing) return existing;
   }
-  return prisma.assistantConversation.create({ data: { userId } });
+  return prisma.assistantConversation.create({ data: { userId, mode: "quick" } });
 }
 
 // ---------- Get / create the latest conversation + messages ----------
@@ -41,13 +43,13 @@ async function getOrCreateConversation(userId: string, conversationId?: string) 
 assistantRouter.get("/conversation", async (req, res) => {
   const userId = req.session.userId!;
   let conversation = await prisma.assistantConversation.findFirst({
-    where: { userId },
+    where: { userId, mode: "quick" },
     orderBy: { updatedAt: "desc" },
     include: { messages: { orderBy: { createdAt: "asc" }, take: 100 } },
   });
   if (!conversation) {
     conversation = await prisma.assistantConversation.create({
-      data: { userId },
+      data: { userId, mode: "quick" },
       include: { messages: true },
     });
   }
@@ -57,7 +59,7 @@ assistantRouter.get("/conversation", async (req, res) => {
 assistantRouter.post("/conversation/new", async (req, res) => {
   const userId = req.session.userId!;
   const conversation = await prisma.assistantConversation.create({
-    data: { userId },
+    data: { userId, mode: "quick" },
     include: { messages: true },
   });
   res.status(201).json(conversation);
@@ -79,6 +81,9 @@ assistantRouter.post("/message", async (req, res) => {
   const userId = req.session.userId!;
   const text = parsed.data.text.trim();
   const conversation = await getOrCreateConversation(userId, parsed.data.conversationId);
+  if (conversation.mode === "conversation") {
+    return res.status(409).json({ error: "This conversation uses the live assistant." });
+  }
 
   // Persist the user turn first so history is durable even if AI fails mid-way.
   await prisma.assistantMessage.create({
@@ -107,7 +112,7 @@ assistantRouter.post("/message", async (req, res) => {
     content: m.content,
   }));
 
-  const plan =
+  let plan =
     (await parseConversationMessage(text, {
       todayISO,
       todayWeekday: getWeekdayName(todayISO),
@@ -126,6 +131,9 @@ assistantRouter.post("/message", async (req, res) => {
       })),
       history,
     })) ?? fallbackPlanFromText(text);
+  if (isChatter(text)) {
+    plan = { reply: "Hey.", spoken: "Hey.", actions: [{ type: "none" }] };
+  }
 
   const result = await executeAssistantPlan(plan, {
     prisma,

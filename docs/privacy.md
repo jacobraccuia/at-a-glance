@@ -5,8 +5,12 @@
 - Sessions via signed, `httpOnly`, `secure`-in-production cookies.
 - All task/bucket/goal/event queries scoped to `req.session.userId`; no
   endpoint trusts a client-supplied user id for data access.
-- No third-party data sharing of any kind in Phase 1 — there are no external
-  integrations yet.
+- When `OPENAI_API_KEY` is set, task text and conversation transcripts are
+  sent to OpenAI for quick capture, Talk, and the live assistant. Audio
+  from a live call goes to OpenAI over WebRTC. The app does not store that
+  audio. The API key stays on the server. Memories and transcripts can be
+  deleted from Account. A missing key does not create tasks from a live
+  conversation.
 - Local dev database runs in Docker, not exposed beyond localhost by default.
 - `.env` holds secrets (DB connection string, session secret); `.gitignore`
   excludes it. `.env.example` documents required vars with placeholder

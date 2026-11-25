@@ -30,8 +30,13 @@ struct MainShell: View {
             }
 
             if model.talkOpen {
-                TalkSheet()
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                if model.talkKind == .quick {
+                    TalkSheet()
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                } else {
+                    LiveTalkSheet()
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
         }
         .animation(.spring(duration: 0.28), value: model.talkOpen)
@@ -55,6 +60,7 @@ struct MainShell: View {
             tabButton(.today, "Today", "sun.max")
             Spacer()
             Button {
+                model.talkKind = .live
                 model.talkOpen.toggle()
             } label: {
                 VStack(spacing: 2) {

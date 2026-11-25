@@ -17,6 +17,7 @@ final class AppModel: ObservableObject {
     }
     /// Bumps when Talk closes so Today/All reload what the assistant just did.
     @Published var boardRevision = 0
+    @Published var talkKind: TalkKind = .live
     /// "" is All. Shared by Today and All, kept across launches.
     @Published var bucketSpot: String {
         didSet { UserDefaults.standard.set(bucketSpot, forKey: "taskr.bucket") }
@@ -112,6 +113,10 @@ final class AppModel: ObservableObject {
         ui.getRed(&r, green: &g, blue: &b, alpha: nil)
         return String(format: "#%02X%02X%02X", Int(r * 255), Int(g * 255), Int(b * 255))
     }
+}
+
+enum TalkKind {
+    case live, quick
 }
 
 enum AppLink: Equatable {

@@ -33,6 +33,9 @@ struct TaskrApp: App {
                     }
                 }
                 .onChange(of: scenePhase) { _, phase in
+                    if phase != .active, model.talkOpen, model.talkKind == .live {
+                        model.talkOpen = false
+                    }
                     guard phase == .active, model.user != nil else { return }
                     Task { await wake() }
                 }

@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		A1000000000000000000001B /* TaskrWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A10000000000000000000010 /* TaskrWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		A1000000000000000000001E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001D /* Assets.xcassets */; };
+		A10000000000000000000032 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000031 /* WebRTC */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -52,6 +53,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A10000000000000000000032 /* WebRTC in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -107,6 +109,9 @@
 				A1000000000000000000001C /* Shared */,
 			);
 			name = Taskr;
+			packageProductDependencies = (
+				A10000000000000000000031 /* WebRTC */,
+			);
 			productName = Taskr;
 			productReference = A10000000000000000000001 /* Taskr.app */;
 			productType = "com.apple.product-type.application";
@@ -149,6 +154,9 @@
 				Base,
 			);
 			mainGroup = A10000000000000000000005;
+			packageReferences = (
+				A10000000000000000000030 /* XCLocalSwiftPackageReference "Vendor/WebRTC" */,
+			);
 			productRefGroup = A10000000000000000000004 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -158,6 +166,21 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		A10000000000000000000030 /* XCLocalSwiftPackageReference "Vendor/WebRTC" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Vendor/WebRTC;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A10000000000000000000031 /* WebRTC */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10000000000000000000030 /* XCRemoteSwiftPackageReference "WebRTC" */;
+			productName = WebRTC;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin PBXResourcesBuildPhase section */
 		A1000000000000000000001F /* Resources */ = {
