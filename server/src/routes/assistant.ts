@@ -226,11 +226,18 @@ assistantRouter.get("/easy-wins", async (req, res) => {
   const openTasks = (
     await prisma.task.findMany({
       where: taskWhere,
+      include: { bucket: true },
       orderBy: { updatedAt: "desc" },
       take: 80,
     })
   ).filter((task) => !doneIds.has(task.id));
-  res.json({ minutes, wins: rankEasyWins(openTasks, minutes) });
+  const wins = rankEasyWins(openTasks, minutes);
+  const byId = new Map(openTasks.map((task) => [task.id, task]));
+  res.json({
+    minutes,
+    wins,
+    tasks: wins.map((win) => byId.get(win.id)).filter((task) => task != null),
+  });
 });
 
 // ---------- One-tap undo of the last consequential action ----------

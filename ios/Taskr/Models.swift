@@ -85,6 +85,7 @@ struct EasyWin: Codable, Identifiable {
 struct EasyWinsPayload: Codable {
     let minutes: Int
     let wins: [EasyWin]
+    let tasks: [TaskItem]?
 }
 
 struct ExecutedAction: Decodable, Identifiable {

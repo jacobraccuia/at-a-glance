@@ -17,7 +17,6 @@ import {
 } from "../theme/bucketTheme";
 import { EasyWinsStrip } from "./EasyWinsStrip";
 import { FilterIcon, ProfileIcon } from "./icons";
-import { TaskEditPanel } from "./TaskEditPanel";
 import { TaskRow } from "./TaskRow";
 import { OccurrenceRow } from "./OccurrenceRow";
 import { QuickCapture } from "./QuickCapture";
@@ -42,6 +41,13 @@ const VIEW_OPTIONS: { id: BoardView; label: string }[] = [
   { id: "all", label: "All" },
 ];
 
+function attentionIsToday(value: string | null): boolean {
+  if (!value) return false;
+  const today = new Date();
+  const date = new Date(value);
+  return date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth() && date.getDate() === today.getDate();
+}
+
 export function TaskBoard({ initialView = "all", focusTaskId }: Props) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -60,7 +66,6 @@ export function TaskBoard({ initialView = "all", focusTaskId }: Props) {
   const [loading, setLoading] = useState(true);
   const [winsToken, setWinsToken] = useState(0);
   const [hiddenWinIds, setHiddenWinIds] = useState<string[]>([]);
-  const [easyEdit, setEasyEdit] = useState<Task | null>(null);
 
   useEffect(() => {
     setView(initialView);
@@ -141,7 +146,7 @@ export function TaskBoard({ initialView = "all", focusTaskId }: Props) {
   const spotRef = useRef(spot);
   pagesRef.current = pages;
   spotRef.current = page.id;
-  const pagerRef = useRef<HTMLDivElement>(null);
+  const boardRef = useRef<HTMLDivElement>(null);
   const dragStart = useRef<{ x: number; y: number; id: number } | null>(null);
 
   function chooseSpot(id: string) {
@@ -186,7 +191,7 @@ export function TaskBoard({ initialView = "all", focusTaskId }: Props) {
   }, [page.color]);
 
   useEffect(() => {
-    const el = pagerRef.current;
+    const el = boardRef.current;
     if (!el) return;
     let acc = 0;
     let lockUntil = 0;
@@ -278,7 +283,15 @@ export function TaskBoard({ initialView = "all", focusTaskId }: Props) {
   const completedOccurrences = view === "today" && !hideFinished ? occurrences.filter((o) => o.status === "completed") : [];
 
   return (
-    <div className="page task-board">
+    <div
+      className="page task-board"
+      ref={boardRef}
+      onPointerDown={onBoardPointerDown}
+      onPointerUp={onBoardPointerUp}
+      onPointerCancel={() => {
+        dragStart.current = null;
+      }}
+    >
       <div className="board-title-row">
         <h1>{branding.appName}</h1>
         <div className="board-title-actions">
@@ -316,12 +329,6 @@ export function TaskBoard({ initialView = "all", focusTaskId }: Props) {
         <div
           className="bucket-pager"
           aria-label="Buckets"
-          ref={pagerRef}
-          onPointerDown={onBoardPointerDown}
-          onPointerUp={onBoardPointerUp}
-          onPointerCancel={() => {
-            dragStart.current = null;
-          }}
         >
           <button type="button" className="bucket-pager-arrow" onClick={() => shiftSpot(-1)} disabled={pageIndex <= 0} aria-label="Previous bucket">
             ‹
@@ -363,18 +370,19 @@ export function TaskBoard({ initialView = "all", focusTaskId }: Props) {
           hideWork={hideWork}
           refreshToken={winsToken}
           hiddenIds={hiddenWinIds}
-          onOpen={(id) => {
-            void api.get<Task>(`/tasks/${id}`).then(setEasyEdit).catch(() => undefined);
-          }}
-        />
-      )}
-
-      {easyEdit && (
-        <TaskEditPanel
-          task={easyEdit}
-          buckets={buckets}
-          onSaved={load}
-          onClose={() => setEasyEdit(null)}
+          renderTask={(task) => (
+            <TaskRow
+              key={task.id}
+              task={task}
+              onComplete={() => completeTask(task)}
+              onUndo={() => undoTask(task)}
+              onMove={(horizon) => moveHorizon(task, horizon)}
+              onDrop={() => dropTask(task)}
+              onAddToToday={attentionIsToday(task.attentionDate) ? undefined : () => addToToday(task)}
+              buckets={buckets}
+              onDetailsSaved={load}
+            />
+          )}
         />
       )}
 

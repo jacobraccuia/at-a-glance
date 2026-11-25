@@ -11,6 +11,11 @@ struct AccountView: View {
     @State private var error: String?
     @State private var nudgeDenied = false
     @State private var nudgeTime = MorningNudge.timeDate
+    @State private var assistantChoices = AssistantChoice.builtin
+    @State private var personalityId = "puck"
+    @State private var memories: [MemoryRow] = []
+    @State private var voiceUsage: UsageRow?
+    @State private var personalityError: String?
 
     var body: some View {
         List {
@@ -52,7 +57,52 @@ struct AccountView: View {
             }
 
             Section("Assistant") {
-                AssistantSection()
+                ForEach(assistantChoices) { choice in
+                    Button {
+                        Task { await choosePersonality(choice.id) }
+                    } label: {
+                        HStack(alignment: .center, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(choice.name).foregroundStyle(palette.ink)
+                                Text(choice.description)
+                                    .font(.caption)
+                                    .foregroundStyle(palette.muted)
+                            }
+                            Spacer(minLength: 8)
+                            if personalityId == choice.id {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(palette.accent)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+                Text("\(assistantChoices.first { $0.id == personalityId }?.name ?? "Puck") on the next call. Voice changes when Talk reconnects.")
+                    .font(.footnote)
+                    .foregroundStyle(palette.muted)
+                if let personalityError {
+                    Text(personalityError).font(.footnote).foregroundStyle(palette.danger)
+                }
+                if let voiceUsage {
+                    Text("Voice this month: $\(String(format: "%.2f", voiceUsage.estimatedUsd)) of $\(Int(voiceUsage.budgetUsd))\(voiceUsage.warning ? " — over the soft budget." : ".")")
+                        .font(.footnote)
+                        .foregroundStyle(palette.muted)
+                }
+                ForEach(memories) { memory in
+                    HStack {
+                        Text("\(memory.text) (\(memory.source))")
+                        Spacer()
+                        Button("Delete") {
+                            Task { await removeMemory(memory.id) }
+                        }
+                        .font(.caption)
+                    }
+                }
+                if !memories.isEmpty {
+                    Button("Delete all memory", role: .destructive) {
+                        Task { await clearMemory() }
+                    }
+                }
             }
 
             Section("Morning") {
@@ -96,8 +146,37 @@ struct AccountView: View {
 
     private func load() async {
         buckets = (try? await model.api.get("buckets?includeArchived=true")) ?? []
+        if let remote: [AssistantChoice] = try? await model.api.get("assistant/personalities"), !remote.isEmpty {
+            assistantChoices = remote
+        }
+        memories = (try? await model.api.get("assistant/memory")) ?? []
+        voiceUsage = try? await model.api.get("assistant/live/usage")
+        let me: MePersonality? = try? await model.api.get("auth/me")
+        if let id = me?.personalityId { personalityId = id }
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         nudgeDenied = settings.authorizationStatus == .denied
+    }
+
+    private func choosePersonality(_ id: String) async {
+        let previous = personalityId
+        personalityId = id
+        personalityError = nil
+        do {
+            let _: MePersonality = try await model.api.patch("assistant/personality", body: PersonalityBody(id: id))
+        } catch {
+            personalityId = previous
+            personalityError = error.localizedDescription
+        }
+    }
+
+    private func removeMemory(_ id: String) async {
+        try? await model.api.delete("assistant/memory/\(id)")
+        memories.removeAll { $0.id == id }
+    }
+
+    private func clearMemory() async {
+        try? await model.api.delete("assistant/memory")
+        memories = []
     }
 
     private func applyNudge(_ on: Bool) async {
@@ -191,6 +270,14 @@ private struct AssistantChoice: Decodable, Identifiable {
     let id: String
     let name: String
     let description: String
+
+    static let builtin: [AssistantChoice] = [
+        AssistantChoice(id: "puck", name: "Puck", description: "A mischievous companion for everyday chaos."),
+        AssistantChoice(id: "atlas", name: "Atlas", description: "Calm, grounded, and direct."),
+        AssistantChoice(id: "sage", name: "Sage", description: "Patient and reflective."),
+        AssistantChoice(id: "mercury", name: "Mercury", description: "Energetic and practical about next steps."),
+        AssistantChoice(id: "logos", name: "Logos", description: "A precise command interface."),
+    ]
 }
 
 private struct MemoryRow: Decodable, Identifiable {
@@ -211,60 +298,4 @@ private struct PersonalityBody: Encodable {
 
 private struct MePersonality: Decodable {
     let personalityId: String?
-}
-
-private struct AssistantSection: View {
-    @EnvironmentObject private var model: AppModel
-    @State private var choices: [AssistantChoice] = []
-    @State private var selected = "puck"
-    @State private var memories: [MemoryRow] = []
-    @State private var usage: UsageRow?
-    @State private var loaded = false
-
-    var body: some View {
-        Picker("Personality", selection: $selected) {
-            ForEach(choices) { choice in
-                Text(choice.name).tag(choice.id)
-            }
-        }
-        .onChange(of: selected) { _, id in
-            guard loaded else { return }
-            Task { try? await model.api.patch("assistant/personality", body: PersonalityBody(id: id)) as MePersonality }
-        }
-        .task { await load() }
-        if let usage {
-            Text("Voice this month: $\(String(format: "%.2f", usage.estimatedUsd)) of $\(Int(usage.budgetUsd))\(usage.warning ? " — over the soft budget." : ".")")
-                .font(.footnote)
-        }
-        ForEach(memories) { memory in
-            HStack {
-                Text("\(memory.text) (\(memory.source))")
-                Spacer()
-                Button("Delete") {
-                    Task {
-                        try? await model.api.delete("assistant/memory/\(memory.id)")
-                        memories.removeAll { $0.id == memory.id }
-                    }
-                }
-                .font(.caption)
-            }
-        }
-        if !memories.isEmpty {
-            Button("Delete all memory") {
-                Task {
-                    try? await model.api.delete("assistant/memory")
-                    memories = []
-                }
-            }
-        }
-    }
-
-    private func load() async {
-        choices = (try? await model.api.get("assistant/personalities")) ?? []
-        memories = (try? await model.api.get("assistant/memory")) ?? []
-        usage = try? await model.api.get("assistant/live/usage")
-        let me: MePersonality? = try? await model.api.get("auth/me")
-        if let id = me?.personalityId { selected = id }
-        loaded = true
-    }
 }

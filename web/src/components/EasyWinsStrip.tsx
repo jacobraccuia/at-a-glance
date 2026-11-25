@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { api } from "../api/client";
+import type { Task } from "../api/types";
 
 interface EasyWin {
   id: string;
@@ -17,7 +18,7 @@ interface Props {
   hideWork?: boolean;
   refreshToken?: number;
   hiddenIds?: string[];
-  onOpen: (id: string) => void;
+  renderTask: (task: Task) => ReactNode;
 }
 
 /** Short tasks that fit the time you actually have. Checking one off clears it here. */
@@ -28,9 +29,9 @@ export function EasyWinsStrip({
   hideWork = false,
   refreshToken = 0,
   hiddenIds = [],
-  onOpen,
+  renderTask,
 }: Props) {
-  const [easyWins, setEasyWins] = useState<EasyWin[]>([]);
+  const [easyWins, setEasyWins] = useState<Task[]>([]);
   const [loaded, setLoaded] = useState(false);
   const ticket = useRef(0);
 
@@ -40,10 +41,16 @@ export function EasyWinsStrip({
     if (bucketId) params.set("bucketId", bucketId);
     else if (hideWork) params.set("excludeBucketName", "Work");
     api
-      .get<{ minutes: number; wins: EasyWin[] }>(`/assistant/easy-wins?${params.toString()}`)
-      .then((r) => {
+      .get<{ minutes: number; wins: EasyWin[]; tasks?: Task[] }>(`/assistant/easy-wins?${params.toString()}`)
+      .then(async (r) => {
         if (mine !== ticket.current) return;
-        setEasyWins(r.wins);
+        let rows = r.tasks ?? [];
+        if (rows.length === 0 && r.wins.length > 0) {
+          const fetched = await Promise.all(r.wins.map((win) => api.get<Task>(`/tasks/${win.id}`).catch(() => null)));
+          rows = fetched.filter((task): task is Task => task != null);
+        }
+        if (mine !== ticket.current) return;
+        setEasyWins(rows);
       })
       .catch(() => {
         /* non-fatal */
@@ -77,17 +84,8 @@ export function EasyWinsStrip({
         <h2>Easy wins</h2>
         <BudgetChips minutes={minutes} onMinutes={onMinutes} />
       </div>
-      <ul className="easy-wins-list">
-        {visible.map((w) => (
-          <li key={w.id}>
-            <button type="button" className="easy-win-chip" onClick={() => onOpen(w.id)}>
-              <span className="easy-win-title">{w.title}</span>
-              <span className="easy-win-meta">
-                {w.estimateMinutes != null ? `~${w.estimateMinutes}m` : `~${w.assumedMinutes}m?`}
-              </span>
-            </button>
-          </li>
-        ))}
+      <ul className="task-list">
+        {visible.map((task) => renderTask(task))}
       </ul>
     </section>
   );

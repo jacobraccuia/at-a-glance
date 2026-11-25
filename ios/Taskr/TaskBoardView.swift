@@ -8,6 +8,7 @@ struct TaskBoardView: View {
     @State private var occurrences: [TaskOccurrence] = []
     @State private var buckets: [Bucket] = []
     @State private var wins: [EasyWin] = []
+    @State private var winTasks: [TaskItem] = []
     @State private var winsReady = false
     @State private var winsTicket = 0
     @State private var search = ""
@@ -78,6 +79,7 @@ struct TaskBoardView: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 8)
         }
+        .gesture(bucketDrag)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             HStack(spacing: 8) {
                 switchChip(model.hideWork ? "Work hidden" : "Hide work", on: model.hideWork) {
@@ -192,7 +194,6 @@ struct TaskBoardView: View {
                 }
             }
         }
-        .gesture(bucketDrag)
     }
 
     private var titleRow: some View {
@@ -270,23 +271,14 @@ struct TaskBoardView: View {
             if winsReady && wins.isEmpty {
                 Text("Nothing that fits \(model.winMinutes) minutes.").font(.caption).foregroundStyle(palette.muted)
             }
-            ForEach(wins) { win in
-                Button {
-                    Task { await open(win.id) }
-                } label: {
-                    HStack {
-                        Text(win.title)
-                        Spacer()
-                        Text(win.estimateMinutes.map { "~\($0)m" } ?? "~\(win.assumedMinutes)m?")
-                            .font(.caption)
-                            .foregroundStyle(palette.muted)
-                    }
-                    .padding(10)
-                    .background(palette.accentSoft)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Open \(win.title)")
+            ForEach(winTasks) { task in
+                TaskRowView(
+                    task: task,
+                    showAdd: true,
+                    onChange: { await reload() },
+                    onClear: { clearWin(task.id) },
+                    onOpen: { detail = task }
+                )
             }
         }
     }
@@ -343,6 +335,7 @@ struct TaskBoardView: View {
 
     private func clearWin(_ id: String) {
         wins.removeAll { $0.id == id }
+        winTasks.removeAll { $0.id == id }
     }
 
     private func reloadWins() async -> [EasyWin] {
@@ -357,6 +350,16 @@ struct TaskBoardView: View {
             let easy: EasyWinsPayload = try await model.api.get("assistant/easy-wins?\(easyQS)")
             guard ticket == winsTicket else { return wins }
             wins = easy.wins
+            var rows = easy.tasks ?? []
+            if rows.isEmpty {
+                for win in easy.wins {
+                    if let task: TaskItem = try? await model.api.get("tasks/\(win.id)") {
+                        rows.append(task)
+                    }
+                }
+            }
+            guard ticket == winsTicket else { return wins }
+            winTasks = rows
             winsReady = true
             return easy.wins
         } catch {
