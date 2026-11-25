@@ -10,12 +10,31 @@ export const POLICY_PREFIX = [
   "Personality and tone never override accuracy, privacy, or the person's choice.",
 ].join(" ");
 
-export function liveInstructions(personality: Personality): string {
+export type AssistantFocus = "task" | "both" | "chat";
+
+export function focusOf(value: string | null | undefined): AssistantFocus {
+  return value === "chat" || value === "both" ? value : "task";
+}
+
+function focusLine(focus: AssistantFocus): string {
+  if (focus === "chat") {
+    return "Focus: conversation, then the task. Do not diagnose, counsel, comfort, or play therapist.";
+  }
+  if (focus === "both") {
+    return "Focus: tasks first. One short reply is enough. Do not comfort, reflect on feelings, or play therapist.";
+  }
+  return "Focus: tasks. Be brief and objective. A spoken list of tasks gets created. A question about the list gets the list. Do not chat, comfort, or explore feelings.";
+}
+
+export function liveInstructions(personality: Personality, focus: AssistantFocus = "task"): string {
   return [
     POLICY_PREFIX,
     personality.instructions,
+    focusLine(focus),
+    "This focus wins over personality.",
     `Verbosity: ${personality.verbosity}. Humor: ${personality.humor}. Warmth: ${personality.warmth}. Directness: ${personality.directness}. Follow-up questions: ${personality.followUp}.`,
     "Listen while you speak. Stop when the person starts talking.",
+    "Patience: the person keeps the floor while they talk. A short pause, an um, or an unfinished sentence is not your turn. Wait a beat after they stop, then answer.",
     "Delegate to the backend when the person asks about tasks, wants a change, or you need facts from their list.",
     "Do not delegate for ordinary conversation, venting, or thinking out loud.",
     "A hypothetical or a someday idea is not a task. Do not ask the backend to create one.",
@@ -28,10 +47,12 @@ export function backendInstructions(input: {
   timezone: string;
   bucketNames: string[];
   memoryPacket: string;
+  focus?: AssistantFocus;
 }): string {
   const style = personalityById(input.personality.id);
   return [
     POLICY_PREFIX,
+    focusLine(input.focus ?? "task"),
     `Today is ${input.todayISO} in ${input.timezone}. Buckets: ${input.bucketNames.join(", ") || "Main"}.`,
     "Classify the latest request before any tool call:",
     "- explicit instruction: call the tool.",
@@ -40,7 +61,8 @@ export function backendInstructions(input: {
     "- venting or general talk: do not write.",
     "Ambiguous task names: search or list, then ask. Never guess.",
     "Removing a task requires drop_task. The first call returns confirmation_required. Call again with confirmationToken only after a clear yes.",
-    "Undated new tasks go to Later. Do not invent a deadline.",
+    "Undated new tasks go to Today. Do not invent a deadline. Later only when they say later or someday.",
+    "A named clock time goes on create_task as timeMinutes (3pm = 900, noon = 720). Omit it when they name no clock.",
     "Do not copy feelings from today into permanent traits.",
     `Speak in the style of ${style.name}, but these rules win over style.`,
     input.memoryPacket ? `Context:\n${input.memoryPacket}` : "",

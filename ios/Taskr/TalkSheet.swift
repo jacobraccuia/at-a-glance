@@ -25,6 +25,7 @@ struct TalkSheet: View {
     @State private var error: String?
     @State private var dragY: CGFloat = 0
     @State private var personalityName = "Puck"
+    @State private var lastSpoken = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -32,7 +33,11 @@ struct TalkSheet: View {
                 .gesture(sheetDrag)
             HStack {
                 VStack(alignment: .leading) {
-                    Text(personalityName).font(.headline)
+                    HStack(spacing: 8) {
+                        Image(systemName: PersonalityMark.symbol(for: personalityName))
+                            .foregroundStyle(palette.accent)
+                        Text(personalityName).font(.headline)
+                    }
                     if face == "thread" {
                         Text(status).font(.caption).foregroundStyle(palette.muted)
                     }
@@ -137,6 +142,9 @@ struct TalkSheet: View {
         .onChange(of: mic.heard) { _, _ in
             let text = mic.heardText
             guard !text.isEmpty else { return }
+            let heard = text.lowercased()
+            let spoken = lastSpoken.lowercased()
+            if !spoken.isEmpty, spoken.contains(heard) || heard.contains(spoken) { return }
             Task { await send(text) }
         }
     }
@@ -157,8 +165,8 @@ struct TalkSheet: View {
     }
 
     private var status: String {
+        if voice.speaking { return "Talking" }
         if sending { return "Thinking…" }
-        if voice.speaking { return "Talking… tap the glow to cut in" }
         if mic.hearing { return "Hearing you" }
         if mic.ready { return "Listening" }
         return mic.supported ? "Starting mic…" : "Type your message"
@@ -207,9 +215,10 @@ struct TalkSheet: View {
             let line = reply.spoken?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
                 ? reply.spoken!
                 : reply.message.content
-            await voice.speak(line, api: model.api) { spoken in
-                caption = spoken
-            }
+            lastSpoken = line
+            caption = line
+            sending = false
+            await voice.speak(line, api: model.api) { _ in }
             caption = ""
             face = "thread"
         } catch {
@@ -271,11 +280,12 @@ final class SpeechListener: ObservableObject {
         silence?.cancel()
         partial = ""
         hearing = false
+        stopEngineOnly()
     }
 
     func resume() {
         paused = false
-        if task == nil { listen() }
+        listen()
     }
 
     func flush() {
@@ -340,7 +350,7 @@ final class SpeechListener: ObservableObject {
     private func armSilence(final: Bool) {
         silence?.cancel()
         silence = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: final ? 200_000_000 : 1_200_000_000)
+            try? await Task.sleep(nanoseconds: final ? 1_600_000_000 : 1_800_000_000)
             await MainActor.run {
                 guard let self, !self.paused else { return }
                 let text = self.partial.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -376,16 +386,7 @@ final class TalkVoice: NSObject, ObservableObject, AVAudioPlayerDelegate {
     func speak(_ text: String, api: APIClient, onWords: @escaping (String) -> Void) async {
         stop()
         speaking = true
-        let words = text.split(separator: " ")
-        let reveal = Task { @MainActor in
-            var shown: [Substring] = []
-            for word in words {
-                if Task.isCancelled { return }
-                shown.append(word)
-                onWords(shown.joined(separator: " "))
-                try? await Task.sleep(nanoseconds: 180_000_000)
-            }
-        }
+        onWords(text)
         struct Body: Encodable { let text: String }
         let started = Date()
         if let data = try? await api.data("assistant/speak", json: Body(text: text)),
@@ -404,7 +405,6 @@ final class TalkVoice: NSObject, ObservableObject, AVAudioPlayerDelegate {
             let seconds = max(0.8, Double(text.count) * 0.06)
             try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
         }
-        reveal.cancel()
         speaking = false
     }
 

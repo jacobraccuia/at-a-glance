@@ -45,22 +45,18 @@ struct TodayGlance: Codable {
 
     private static func fetch() async -> TodayGlance? {
         guard let header = UserDefaults(suiteName: appGroup)?.string(forKey: "cookie"), !header.isEmpty else { return nil }
-        async let todayCall = get("tasks?view=today", cookie: header, as: WireToday.self)
-        async let easyCall = get("assistant/easy-wins?minutes=25", cookie: header, as: WireEasy.self)
-        guard let today = await todayCall else { return nil }
-        let easy = await easyCall
+        guard let today = await get("tasks?view=today", cookie: header, as: WireToday.self) else { return nil }
         let active = today.tasks.filter { $0.status == "active" }
         let pending = today.occurrences.filter { $0.status == "pending" }
-        let titles = (active.map(\.title) + pending.compactMap { $0.task?.title }).prefix(3)
-        let win = easy?.wins.first
+        let titles = Array((active.map(\.title) + pending.compactMap { $0.task?.title }).prefix(3))
         let previous = read()
         return TodayGlance(
             day: dayString(),
             count: active.count + pending.count,
-            easyTitle: win?.title ?? active.first?.title ?? pending.first?.task?.title,
-            easyMinutes: win?.estimateMinutes ?? win?.assumedMinutes ?? active.first?.estimateMinutes,
-            easyId: win?.id ?? active.first?.id ?? pending.first?.task?.id,
-            titles: Array(titles),
+            easyTitle: titles.first,
+            easyMinutes: nil,
+            easyId: active.first?.id ?? pending.first?.task?.id,
+            titles: titles,
             accentHex: previous.accentHex
         )
     }
@@ -101,13 +97,3 @@ private struct WireOccurrence: Decodable {
     let task: WireTask?
 }
 
-private struct WireEasy: Decodable {
-    let wins: [WireWin]
-}
-
-private struct WireWin: Decodable {
-    let id: String
-    let title: String
-    let estimateMinutes: Int?
-    let assumedMinutes: Int
-}

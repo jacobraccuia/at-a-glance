@@ -12,7 +12,7 @@ struct TodayProvider: TimelineProvider {
             day: "",
             count: 2,
             easyTitle: "Water the plants",
-            easyMinutes: 5,
+            easyMinutes: nil,
             easyId: nil,
             titles: ["Water the plants", "Reply to the promoter"],
             accentHex: "#2f5bd3"
@@ -91,13 +91,12 @@ struct TodayWidgetView: View {
     }
 
     private var detail: String {
-        guard let easy = glance.easyTitle, glance.count > 0 else { return "Nothing waiting." }
-        if let minutes = glance.easyMinutes { return "\(easy) · \(minutes)m" }
-        return easy
+        if glance.titles.isEmpty { return glance.count == 0 ? "Nothing waiting." : "Open Taskr" }
+        return glance.titles.prefix(2).joined(separator: "\n")
     }
 
     private var inline: String {
-        if let easy = glance.easyTitle, glance.count > 0 { return "\(glance.count) today · \(easy)" }
+        if let first = glance.titles.first, glance.count > 0 { return "\(glance.count) today · \(first)" }
         return glance.count == 0 ? "Today is clear" : "\(glance.count) today"
     }
 }
@@ -108,7 +107,7 @@ struct TodayWidget: Widget {
             TodayWidgetView(glance: entry.glance)
         }
         .configurationDisplayName("Today")
-        .description("The next easy thing, and how many are left.")
+        .description("What's on today.")
         .supportedFamilies([
             .systemSmall,
             .systemMedium,

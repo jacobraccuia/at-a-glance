@@ -5,7 +5,7 @@ import { useCelebrate } from "../hooks/useCelebrate";
 import { useSwipeRow } from "../hooks/useSwipeRow";
 import { DoneSparkles } from "./DoneSparkles";
 import { TaskEditPanel } from "./TaskEditPanel";
-import { CheckIcon, DropIcon, LaterIcon, SnoozeIcon } from "./icons";
+import { CheckIcon, SnoozeIcon, ArchiveIcon } from "./icons";
 
 interface Props {
   task: Task;
@@ -13,22 +13,15 @@ interface Props {
   onUndo: () => void;
   onMove: (horizon: "today" | "tomorrow" | "nextWeek" | "later") => void;
   onDrop: () => void;
+  onArchive: () => void;
   onAddToToday?: () => void;
   buckets?: Bucket[];
   onDetailsSaved?: () => void;
   /** Open the details panel on first render (home easy-win tap). */
   startDetailsOpen?: boolean;
-}
-
-function isAttentionDateToday(attentionDate: string | null): boolean {
-  if (!attentionDate) return false;
-  const today = new Date();
-  const d = new Date(attentionDate);
-  return (
-    d.getFullYear() === today.getFullYear() &&
-    d.getMonth() === today.getMonth() &&
-    d.getDate() === today.getDate()
-  );
+  /** All buckets already names the place, so the row chip is just noise. */
+  showBucket?: boolean;
+  onCommitChange?: (committed: boolean) => void;
 }
 
 export function TaskRow({
@@ -37,33 +30,45 @@ export function TaskRow({
   onUndo,
   onMove,
   onDrop,
-  onAddToToday,
+  onArchive,
   buckets,
   onDetailsSaved,
   startDetailsOpen = false,
+  showBucket = true,
+  onCommitChange,
 }: Props) {
   const isDone = task.status === "completed";
   const span = isDone ? doneIn(task.createdAt, task.completedAt) : null;
   const [detailsOpen, setDetailsOpen] = useState(startDetailsOpen);
+  const [stamp, setStamp] = useState<string | null>(null);
   const { poof, celebrate } = useCelebrate(onComplete);
 
-  // Swipe left to complete. Swipe right a little for Tomorrow, further for Next week.
-  // Disabled once a task is already done, and while renaming inline, so a
-  // drag inside the title-edit input doesn't fight with text selection.
-  const canToday = Boolean(onAddToToday);
+  function done() {
+    if (stamp || poof) return;
+    setStamp("Done");
+    celebrate();
+  }
+
+  function act(label: string, run: () => void) {
+    if (stamp || poof) return;
+    setStamp(label);
+    window.setTimeout(run, 1100);
+  }
+
+  // A long swipe left archives. A long swipe right is Tomorrow, and further is Next week.
+  // A short swipe snaps back so it can still change buckets.
   const { dragX, dragging, stage, handlers } = useSwipeRow({
-    disabled: isDone || poof,
-    zones: canToday ? 3 : 2,
-    onSwipeLeft: celebrate,
-    onSwipeRightNear: canToday ? onAddToToday : () => onMove("tomorrow"),
-    onSwipeRightMid: canToday ? () => onMove("tomorrow") : undefined,
-    onSwipeRightFar: () => onMove("nextWeek"),
+    disabled: isDone || poof || Boolean(stamp),
+    onCommitChange,
+    onSwipeLeft: () => act("Archived", onArchive),
+    onSwipeRightNear: () => act("Tomorrow", () => onMove("tomorrow")),
+    onSwipeRightFar: () => act("Upcoming", () => onMove("nextWeek")),
   });
-  const rightLabel =
-    stage === "right-far" ? "Next week" : stage === "right-mid" ? "Tomorrow" : canToday ? "Today" : "Tomorrow";
+  const rightLabel = stage === "right-far" ? "Upcoming" : "Tomorrow";
+  const swipeClass = stage === "right-far" ? " armed later" : stage === "right-near" ? " armed tomorrow" : "";
 
   return (
-    <li className={`task-row${isDone ? " done" : ""}${poof ? " poof" : ""}`}>
+    <li className={`task-row${isDone ? " done" : ""}${poof ? " poof" : ""}${stamp ? " stamped" : ""}`}>
       {poof && <DoneSparkles />}
       <div className="swipe-row">
         {/* Dragging the content right exposes the LEFT side of this
@@ -75,16 +80,14 @@ export function TaskRow({
         {!isDone && (
           <div className="swipe-bg">
             <div
-              className={`swipe-bg-side swipe-bg-left swipe-action-snooze${
-                stage === "right-near" || stage === "right-mid" ? " armed" : stage === "right-far" ? " armed far" : ""
-              }`}
+              className={`swipe-bg-side swipe-bg-left swipe-action-snooze${swipeClass}`}
             >
               <SnoozeIcon />
               <span>{rightLabel}</span>
             </div>
-            <div className={`swipe-bg-side swipe-bg-right swipe-action-complete${stage === "left" ? " armed" : ""}`}>
-              <CheckIcon />
-              <span>Done</span>
+            <div className={`swipe-bg-side swipe-bg-right swipe-action-archive${stage === "left" ? " armed" : ""}`}>
+              <ArchiveIcon />
+              <span>Archive</span>
             </div>
           </div>
         )}
@@ -100,7 +103,7 @@ export function TaskRow({
             <button
               type="button"
               className={`done-toggle${isDone ? " is-done" : ""}`}
-              onClick={isDone ? onUndo : celebrate}
+              onClick={isDone ? onUndo : done}
               aria-label={isDone ? "Mark not done" : "Mark done"}
               title={isDone ? "Undo" : "Done"}
             >
@@ -110,10 +113,14 @@ export function TaskRow({
               <button type="button" className="task-title" onClick={() => buckets && setDetailsOpen((open) => !open)}>
                 {task.title}
               </button>
+              {stamp && <span className="task-stamp">{stamp}</span>}
               <div className="task-meta">
-                {task.bucket && <span className="pill" style={{ borderColor: task.bucket.color ?? undefined }}>{task.bucket.name}</span>}
+                {showBucket && task.bucket && <span className="pill" style={{ borderColor: task.bucket.color ?? undefined }}>{task.bucket.name}</span>}
                 {task.hardDeadline && (
-                  <span className="pill deadline">Due {new Date(task.hardDeadline).toLocaleDateString()}</span>
+                  <span className="pill deadline">Due {dueWhen(task.hardDeadline)}</span>
+                )}
+                {!task.hardDeadline && task.attentionDate && clockLabel(task.attentionDate) && (
+                  <span className="pill">{clockLabel(task.attentionDate)}</span>
                 )}
                 {task.importance === "high" && <span className="pill importance-high">Important</span>}
                 {task.effort === "low" && <span className="pill">Low effort</span>}
@@ -125,19 +132,6 @@ export function TaskRow({
                 {task.notes && <span className="pill">Has notes</span>}
               </div>
             </div>
-            {!isDone && (
-              <div className="task-actions">
-                <button className="icon-button" onClick={() => onMove("tomorrow")} title="Tomorrow" aria-label="Move to tomorrow">
-                  <SnoozeIcon />
-                </button>
-                <button className="icon-button" onClick={() => onMove("later")} title="Later" aria-label="Move to later">
-                  <LaterIcon />
-                </button>
-                <button className="icon-button danger" onClick={onDrop} title="Drop this task" aria-label="Drop this task">
-                  <DropIcon />
-                </button>
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -147,8 +141,27 @@ export function TaskRow({
           buckets={buckets}
           onSaved={() => onDetailsSaved?.()}
           onClose={() => setDetailsOpen(false)}
+          onDelete={onDrop}
         />
       )}
     </li>
   );
+}
+
+function hasClock(iso: string): boolean {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return false;
+  return date.getHours() !== 0 || date.getMinutes() !== 0;
+}
+
+function clockLabel(iso: string): string {
+  if (!hasClock(iso)) return "";
+  return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+function dueWhen(iso: string): string {
+  const date = new Date(iso);
+  const day = date.toLocaleDateString();
+  const time = clockLabel(iso);
+  return time ? `${day} ${time}` : day;
 }

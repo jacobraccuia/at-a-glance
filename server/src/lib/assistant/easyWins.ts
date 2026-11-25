@@ -15,8 +15,6 @@ export interface EasyWin {
 }
 
 export const DEFAULT_EASY_WIN_MINUTES = 30;
-/** Cold-start assumption when estimateMinutes is null -- conservative short. */
-const UNKNOWN_ESTIMATE_ASSUMPTION = 15;
 
 /**
  * Rank open tasks that can realistically be finished inside `budgetMinutes`.
@@ -33,17 +31,15 @@ export function rankEasyWins(tasks: Task[], budgetMinutes: number = DEFAULT_EASY
     // Waiting on someone else is the opposite of an easy win.
     if (t.waitingOn && t.waitingOn.trim()) continue;
 
-    // A chosen effort beats the minute guess. High is never an easy win.
-    // Medium only fits the 45 minute chip. Low is small enough for any chip.
+    // High never fits. Medium only fits a 45 minute window. Low is small enough for any window.
+    // A blank estimate is not short. Effort can still qualify the task.
     if (t.effort === "high") continue;
     if (t.effort === "medium" && budget < 45) continue;
+    if (t.effort == null && (t.estimateMinutes == null || t.estimateMinutes > budget)) continue;
 
-    const assumedMinutes = t.estimateMinutes ?? UNKNOWN_ESTIMATE_ASSUMPTION;
-    if (t.effort == null && assumedMinutes > budget) continue;
+    const assumedMinutes = t.estimateMinutes ?? 0;
 
-    // Shorter = higher score. Unknown estimates get a small confidence penalty.
     let score = 100 - assumedMinutes;
-    if (t.estimateMinutes == null) score -= 10;
     // Low-friction items nudge up; high-importance + tiny effort is a jackpot.
     if (t.importance === "low") score += 5;
     if (t.importance === "high" && assumedMinutes <= 10) score += 10;
@@ -72,8 +68,8 @@ export function formatEasyWinsSummary(wins: EasyWin[], budgetMinutes: number): s
     return `No easy wins that fit in ${budgetMinutes} minutes right now.`;
   }
   const lines = wins.map((w) => {
-    const mins = w.estimateMinutes != null ? `~${w.estimateMinutes}m` : `~${w.assumedMinutes}m?`;
-    return `• "${w.title}" (${mins})`;
+    const mins = w.estimateMinutes != null ? ` (~${w.estimateMinutes}m)` : "";
+    return `• "${w.title}"${mins}`;
   });
   return `Easy wins for ~${budgetMinutes} minutes:\n${lines.join("\n")}`;
 }

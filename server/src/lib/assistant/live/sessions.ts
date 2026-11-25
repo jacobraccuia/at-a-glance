@@ -1,7 +1,7 @@
 import { prisma } from "../../../db/client.js";
 import { personalityById } from "../../../config/personalities.js";
 import { getCurrentDateInTimeZone } from "../../timezone.js";
-import { backendInstructions, liveInstructions } from "./prompts.js";
+import { backendInstructions, focusOf, liveInstructions } from "./prompts.js";
 import { memoryPacket, saveMemories, type MemoryDraft } from "./memory.js";
 import { LIVE_TOOLS, safetyId } from "./tools.js";
 import { createResponse, liveKey } from "./openaiHttp.js";
@@ -15,6 +15,7 @@ async function prefsFor(userId: string) {
   return {
     timezone: prefs?.timezone ?? "UTC",
     personalityId: prefs?.personalityId ?? "puck",
+    assistantFocus: focusOf(prefs?.assistantFocus),
   };
 }
 
@@ -75,10 +76,10 @@ export async function openLiveSession(userId: string, sdp: string, conversationI
     body: JSON.stringify({
       session: {
         model: "gpt-live-1.1",
-        instructions: liveInstructions(personality),
+        instructions: liveInstructions(personality, prefs.assistantFocus),
         audio: { output: { voice: personality.voice } },
         wake_policy: { type: "speech" },
-        idle_timeout_s: 15,
+        idle_timeout_s: 20,
         safety_identifier: safetyId(userId),
         input,
         delegation: {
@@ -91,6 +92,7 @@ export async function openLiveSession(userId: string, sdp: string, conversationI
               timezone: prefs.timezone,
               bucketNames: buckets.map((bucket) => bucket.name),
               memoryPacket: packet,
+              focus: prefs.assistantFocus,
             }),
             tools: LIVE_TOOLS,
             tool_choice: "auto",
@@ -246,6 +248,7 @@ export async function textTurn(userId: string, text: string, conversationId?: st
         timezone: prefs.timezone,
         bucketNames: buckets.map((bucket) => bucket.name),
         memoryPacket: packet,
+        focus: prefs.assistantFocus,
       }),
       tools: LIVE_TOOLS,
       tool_choice: "auto",

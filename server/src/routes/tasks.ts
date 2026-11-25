@@ -11,6 +11,7 @@ import {
   getCurrentDateInTimeZone,
   getUpcomingWeekdayOffsets,
   getWeekdayName,
+  dateAtMinutes,
   startOfDayInTimeZone,
 } from "../lib/timezone.js";
 import { parseMultiCaptureText, type CaptureIntent } from "../lib/assistant/intentParser.js";
@@ -21,7 +22,7 @@ import {
   horizonWindows,
   type HorizonName,
 } from "../lib/horizons.js";
-import { completeTask, dropTask, reopenTask, setHorizon, snoozeTask } from "../lib/tasks/service.js";
+import { archiveTask, completeTask, dropTask, reopenTask, setHorizon, snoozeTask } from "../lib/tasks/service.js";
 
 export const tasksRouter = Router();
 tasksRouter.use(requireAuth);
@@ -205,8 +206,7 @@ interface QuickCaptureTaskData {
 }
 
 // Builds the create() payload for a single captured item. AI dates are
-// always "inferred". No date clue → Later. addToToday is the explicit
-// override onto Today. A named day or deadline wins over that override.
+// always "inferred". No date clue → Today. A named day or "later" wins.
 function buildQuickCaptureData(
   userId: string,
   rawText: string,
@@ -250,7 +250,10 @@ function buildQuickCaptureData(
   const hasDate = intent != null && intent.dateKind !== "none" && intent.dateDaysFromNow != null;
   if (hasDate && intent) {
     const resolvedDateStr = addDaysToDateString(todayISO, intent.dateDaysFromNow!);
-    const resolvedDate = startOfDayInTimeZone(resolvedDateStr, tz);
+    const resolvedDate =
+      intent.timeMinutes == null
+        ? startOfDayInTimeZone(resolvedDateStr, tz)
+        : dateAtMinutes(resolvedDateStr, tz, intent.timeMinutes);
     data.status = "active";
     if (intent.dateKind === "hard") {
       data.hardDeadline = resolvedDate;
@@ -258,7 +261,7 @@ function buildQuickCaptureData(
     } else {
       data.attentionDate = resolvedDate;
     }
-  } else if (addToToday) {
+  } else if (addToToday && intent?.dateKind !== "soft") {
     data.status = "active";
     data.attentionDate = new Date();
   }
@@ -314,7 +317,7 @@ tasksRouter.post("/quick-capture", async (req, res) => {
   const createdTasks = [];
   for (let i = 0; i < rawItems.length; i++) {
     // Default off: a bare capture lands in Later unless the caller opts into Today.
-    const addToToday = parsed.data.addToToday === true;
+    const addToToday = parsed.data.addToToday !== false;
     const data = buildQuickCaptureData(userId, rawItems[i], intents[i], addToToday, todayISO, tz, buckets, lessons, home.id);
     const task = await prisma.task.create({ data });
     await logTaskEvent(prisma, {
@@ -345,7 +348,8 @@ tasksRouter.get("/", async (req, res) => {
   const today = getCurrentDateInTimeZone(clock.tz);
   const windows = horizonWindows(today, clock.tz, clock.weekStartsOn);
 
-  const baseWhere: Record<string, unknown> = { userId };
+  const archivedView = view === "archived";
+  const baseWhere: Record<string, unknown> = { userId, archivedAt: archivedView ? { not: null } : null };
   if (bucketId) baseWhere.bucketId = bucketId;
   else if (excludeName) {
     const hidden = await bucketIdsByName(prisma, userId, excludeName);
@@ -354,6 +358,15 @@ tasksRouter.get("/", async (req, res) => {
     }
   }
   if (search) baseWhere.title = { contains: search, mode: "insensitive" };
+
+  if (archivedView) {
+    const tasks = await prisma.task.findMany({
+      where: baseWhere,
+      orderBy: { archivedAt: "desc" },
+      include: { bucket: true },
+    });
+    return res.json(tasks);
+  }
 
   if (view === "captured") {
     const tasks = await prisma.task.findMany({
@@ -433,7 +446,7 @@ tasksRouter.get("/", async (req, res) => {
   if (statusFilter) {
     where.status = statusFilter;
   } else {
-    where.status = { not: "dropped" };
+    where.status = { in: ["captured", "active"] };
   }
   const tasks = await prisma.task.findMany({
     where,
@@ -540,6 +553,12 @@ tasksRouter.post("/:id/snooze", async (req, res) => {
 
 tasksRouter.post("/:id/drop", async (req, res) => {
   const result = await dropTask(req.session.userId!, req.params.id);
+  if (!result.ok) return res.status(result.status).json({ error: result.error });
+  res.json(result.httpBody);
+});
+
+tasksRouter.post("/:id/archive", async (req, res) => {
+  const result = await archiveTask(req.session.userId!, req.params.id);
   if (!result.ok) return res.status(result.status).json({ error: result.error });
   res.json(result.httpBody);
 });

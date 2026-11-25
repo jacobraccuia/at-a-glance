@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { branding } from "../config/branding";
+import { PersonalityMark } from "../components/icons";
 import { PalettePicker } from "../components/PalettePicker";
 import { useAuth } from "../auth/AuthContext";
 import { BucketsPage } from "./BucketsPage";
@@ -31,6 +32,7 @@ export function SettingsPage() {
   const navigate = useNavigate();
   const [personalities, setPersonalities] = useState<Personality[]>([]);
   const [personalityId, setPersonalityId] = useState("puck");
+  const [focus, setFocus] = useState("task");
   const [personalityError, setPersonalityError] = useState<string | null>(null);
   const [memories, setMemories] = useState<MemoryRow[]>([]);
   const [usage, setUsage] = useState<Usage | null>(null);
@@ -38,8 +40,11 @@ export function SettingsPage() {
   useEffect(() => {
     api.get<Personality[]>("/assistant/personalities").then(setPersonalities).catch(() => undefined);
     api.get<MemoryRow[]>("/assistant/memory").then(setMemories).catch(() => undefined);
-    api.get<{ personalityId?: string }>("/auth/me").then((me) => {
+    api.get<{ personalityId?: string; assistantFocus?: string }>("/auth/me").then((me) => {
       if (me.personalityId) setPersonalityId(me.personalityId);
+      if (me.assistantFocus === "chat" || me.assistantFocus === "both" || me.assistantFocus === "task") {
+        setFocus(me.assistantFocus);
+      }
     }).catch(() => undefined);
     api.get<Usage>("/assistant/live/usage").then(setUsage).catch(() => undefined);
   }, []);
@@ -47,6 +52,18 @@ export function SettingsPage() {
   async function onLogout() {
     await logout();
     navigate("/login");
+  }
+
+  async function chooseFocus(next: string) {
+    const previous = focus;
+    setFocus(next);
+    setPersonalityError(null);
+    try {
+      await api.patch("/assistant/focus", { focus: next });
+    } catch (err) {
+      setFocus(previous);
+      setPersonalityError(err instanceof Error ? err.message : "Could not save that focus.");
+    }
   }
 
   async function choosePersonality(id: string) {
@@ -88,15 +105,28 @@ export function SettingsPage() {
               aria-pressed={personality.id === personalityId}
               onClick={() => choosePersonality(personality.id)}
             >
-              <strong>{personality.name}</strong>
-              <span>{personality.description}</span>
+              <PersonalityMark name={personality.name} />
+              <span className="personality-copy">
+                <strong>{personality.name}</strong>
+                <span>{personality.description}</span>
+              </span>
             </button>
           ))}
         </div>
-        <p className="muted small">
-          {personalities.find((personality) => personality.id === personalityId)?.name ?? "Puck"} on the next call.
-          Voice changes when Talk reconnects.
-        </p>
+        <div className="focus-row" role="group" aria-label="How much chat">
+          {(
+            [
+              ["task", "Tasks"],
+              ["both", "Both"],
+              ["chat", "Chat"],
+            ] as const
+          ).map(([id, label]) => (
+            <button key={id} type="button" className={focus === id ? "on" : ""} aria-pressed={focus === id} onClick={() => chooseFocus(id)}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="muted small">Tasks keeps her on the list. Chat lets her talk more. She stays an assistant, not a therapist.</p>
         {personalityError && <p className="muted small">{personalityError}</p>}
         {usage && (
           <p className="muted small">

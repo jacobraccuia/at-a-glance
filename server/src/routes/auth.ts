@@ -104,5 +104,8 @@ authRouter.get("/me", async (req, res) => {
   return res.json({
     ...publicUser(user, user.preferences?.timezone ?? "UTC"),
     personalityId: user.preferences?.personalityId ?? "puck",
+    assistantFocus: user.preferences?.assistantFocus === "chat" || user.preferences?.assistantFocus === "both"
+      ? user.preferences.assistantFocus
+      : "task",
   });
 });

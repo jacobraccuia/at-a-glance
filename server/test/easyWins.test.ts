@@ -67,11 +67,14 @@ describe("rankEasyWins", () => {
     expect(wins.map((w) => w.title)).toEqual(["Doable"]);
   });
 
-  it("assumes 15m for unknown estimates and still ranks them", () => {
+  it("leaves out tasks with no estimate and no effort", () => {
     const wins = rankEasyWins([fakeTask("No estimate")], 25);
-    expect(wins).toHaveLength(1);
-    expect(wins[0].assumedMinutes).toBe(15);
-    expect(wins[0].estimateMinutes).toBeNull();
+    expect(wins).toHaveLength(0);
+  });
+
+  it("keeps a low-effort task even when the estimate is blank", () => {
+    const wins = rankEasyWins([fakeTask("Small", { effort: "low" })], 25);
+    expect(wins.map((w) => w.title)).toEqual(["Small"]);
   });
 
   it("prefers shorter + high-importance quick hits", () => {

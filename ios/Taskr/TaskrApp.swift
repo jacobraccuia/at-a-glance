@@ -18,6 +18,8 @@ struct TaskrApp: App {
                 .task { await model.restore() }
                 .onOpenURL { model.open($0) }
                 .onAppear {
+                    TalkLaunch.model = model
+                    TalkLaunch.consume()
                     MorningNudge.install { action, easyId in
                         if action == "talk" {
                             model.link = .talk
@@ -33,15 +35,17 @@ struct TaskrApp: App {
                     }
                 }
                 .onChange(of: scenePhase) { _, phase in
-                    if phase != .active, model.talkOpen, model.talkKind == .live {
-                        model.talkOpen = false
-                    }
                     guard phase == .active, model.user != nil else { return }
+                    TalkLaunch.consume()
                     Task { await wake() }
                 }
                 .onChange(of: model.user?.id) { _, id in
                     guard id != nil else { return }
+                    TalkLaunch.consume()
                     Task { await wake() }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: TalkLaunch.notification)) { _ in
+                    TalkLaunch.consume()
                 }
         }
     }

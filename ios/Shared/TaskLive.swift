@@ -64,6 +64,11 @@ enum LiveTaskRemote {
     static let apiBase = "https://server-production-1374.up.railway.app/api"
     static let appGroup = "group.app.taskr.ios"
 
+    static func capture(_ text: String) async -> Bool {
+        let body = try? JSONSerialization.data(withJSONObject: ["text": text, "addToToday": true])
+        return await fetch("POST", "tasks/quick-capture", body: body) != nil
+    }
+
     static func complete(_ taskId: String) async -> Bool {
         if await send("POST", "tasks/\(taskId)/complete") { return true }
         guard let occ = await pendingOccurrence(taskId) else { return false }
@@ -84,12 +89,16 @@ enum LiveTaskRemote {
         await fetch(method, path) != nil
     }
 
-    private static func fetch(_ method: String, _ path: String) async -> Data? {
+    private static func fetch(_ method: String, _ path: String, body: Data? = nil) async -> Data? {
         guard let header = UserDefaults(suiteName: appGroup)?.string(forKey: "cookie"), !header.isEmpty else { return nil }
         guard let url = URL(string: apiBase + "/" + path) else { return nil }
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue(header, forHTTPHeaderField: "Cookie")
+        if let body {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = body
+        }
         guard let (data, response) = try? await URLSession.shared.data(for: request),
               let http = response as? HTTPURLResponse,
               (200..<300).contains(http.statusCode) else { return nil }

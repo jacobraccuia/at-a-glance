@@ -2,13 +2,13 @@ import { useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { api } from "../api/client";
 import { ArrowRightIcon } from "./icons";
 
-// Fast dump. No date lands in Later. A named day lands in that horizon.
+// Fast dump. No date lands on Today. A named day lands in that horizon.
 const MAX_ROWS = 8;
 
 const PLACE: Record<string, string> = {
   today: "Today",
   tomorrow: "Tomorrow",
-  nextWeek: "Next week",
+  nextWeek: "Upcoming",
   later: "Later",
 };
 
@@ -30,7 +30,10 @@ export function QuickCapture({ onCaptured }: { onCaptured: () => void }) {
     if (!trimmed) return;
     setSubmitting(true);
     try {
-      const created = await api.post<{ title: string; horizon?: string }[]>("/tasks/quick-capture", { text: trimmed });
+      const created = await api.post<{ title: string; horizon?: string }[]>("/tasks/quick-capture", {
+        text: trimmed,
+        addToToday: true,
+      });
       setText("");
       if (textareaRef.current) textareaRef.current.style.height = "auto";
       setNotice(savedNote(created));

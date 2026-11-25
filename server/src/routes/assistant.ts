@@ -144,7 +144,7 @@ assistantRouter.post("/message", async (req, res) => {
     lessons,
     defaultBucketId: home.id,
     // Spoken / typed creates with no date clues land in Later.
-    addToTodayDefault: false,
+    addToTodayDefault: true,
     weekStartsOn: (await prisma.userPreferences.findUnique({ where: { userId } }))?.weekStartsOn ?? 0,
   });
 
@@ -204,7 +204,7 @@ assistantRouter.get("/easy-wins", async (req, res) => {
   const minutes = Number.isFinite(raw) ? Math.max(1, Math.min(240, raw)) : DEFAULT_EASY_WIN_MINUTES;
   const bucketId = typeof req.query.bucketId === "string" ? req.query.bucketId : "";
   const excludeName = typeof req.query.excludeBucketName === "string" ? req.query.excludeBucketName : "";
-  const taskWhere: Record<string, unknown> = { userId, status: { in: ["captured", "active"] } };
+  const taskWhere: Record<string, unknown> = { userId, status: { in: ["captured", "active"] }, archivedAt: null };
   if (bucketId) taskWhere.bucketId = bucketId;
   else if (excludeName) {
     const hidden = await bucketIdsByName(prisma, userId, excludeName);

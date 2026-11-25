@@ -68,6 +68,8 @@ model UserPreferences {
   timezone      String   @default("UTC")
   weekStartsOn  Int      @default(0)
   personalityId String   @default("puck")
+  /// task, both, or chat. Task is the short objective default.
+  assistantFocus String  @default("task")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
@@ -199,7 +201,7 @@ model Task {
   estimateConfidence Confidence?
   actualMinutes      Int?
   importance         Importance      @default(medium)
-  /// How big the work is. Null means the minute guess still decides easy wins.
+  /// How big the work is. Optional. Does not move the task between lists.
   effort             Effort?
   waitingOn          String?
   recurrenceRuleId   String?
@@ -207,6 +209,7 @@ model Task {
   snoozedUntil       DateTime?
   completedAt        DateTime?
   droppedAt          DateTime?
+  archivedAt         DateTime?
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 

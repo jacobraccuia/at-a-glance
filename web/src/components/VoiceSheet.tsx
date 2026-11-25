@@ -3,7 +3,7 @@ import { api } from "../api/client";
 import { useAssistantTts } from "../hooks/useAssistantTts";
 import { DEFAULT_SILENCE_MS, useConversationMic } from "../hooks/useConversationMic";
 import { useVoiceSession } from "../voice/VoiceSessionContext";
-import { ArrowRightIcon, MicIcon } from "./icons";
+import { ArrowRightIcon, MicIcon, PersonalityMark } from "./icons";
 
 interface EasyWin {
   id: string;
@@ -350,7 +350,10 @@ export function VoiceSheet() {
           <div className="voice-sheet-grab" aria-hidden />
           <div className="voice-sheet-title-row">
             <div>
-              <h2>{name}</h2>
+              <h2>
+                <PersonalityMark name={name} />
+                {name}
+              </h2>
               {face === "thread" && <p className="voice-sheet-status">{statusLabel}</p>}
             </div>
             <div className="voice-sheet-actions">

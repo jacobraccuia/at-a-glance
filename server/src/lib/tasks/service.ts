@@ -10,6 +10,7 @@ import {
   addDaysToDateString,
   endOfDayInTimeZone,
   getCurrentDateInTimeZone,
+  dateAtMinutes,
   startOfDayInTimeZone,
 } from "../timezone.js";
 import {
@@ -37,6 +38,17 @@ export type TaskOp =
       changed: boolean;
     }
   | { ok: false; status: number; error: string };
+
+function attentionOn(
+  horizon: Exclude<HorizonName, "later">,
+  windows: ReturnType<typeof horizonWindows>,
+  tz: string,
+  timeMinutes: number | null | undefined
+): Date {
+  if (timeMinutes == null) return attentionInstant(horizon, windows);
+  const day = horizon === "today" ? windows.todayISO : horizon === "tomorrow" ? windows.tomorrowISO : windows.nextWeekStartISO;
+  return dateAtMinutes(day, tz, timeMinutes);
+}
 
 async function clock(userId: string) {
   const prefs = await prisma.userPreferences.findUnique({ where: { userId } });
@@ -146,12 +158,31 @@ export async function dropTask(userId: string, taskId: string): Promise<TaskOp> 
   };
 }
 
+export async function archiveTask(userId: string, taskId: string): Promise<TaskOp> {
+  const task = await ownedTask(userId, taskId);
+  if (!task) return { ok: false, status: 404, error: "Task not found" };
+  const updated = await prisma.task.update({
+    where: { id: task.id },
+    data: { archivedAt: new Date() },
+  });
+  await logTaskEvent(prisma, { taskId: task.id, userId, type: "archived", payload: { via: "board" } });
+  return {
+    ok: true,
+    summary: `Archived "${updated.title}"`,
+    taskId: updated.id,
+    taskTitle: updated.title,
+    httpBody: updated,
+    undo: { kind: "drop", taskId: updated.id },
+    changed: true,
+  };
+}
+
 export async function reopenTask(userId: string, taskId: string): Promise<TaskOp> {
   const task = await ownedTask(userId, taskId);
   if (!task) return { ok: false, status: 404, error: "Task not found" };
   const updated = await prisma.task.update({
     where: { id: task.id },
-    data: { status: "active", droppedAt: null, completedAt: null },
+    data: { status: "active", droppedAt: null, completedAt: null, archivedAt: null },
   });
   await logTaskEvent(prisma, { taskId: task.id, userId, type: "reopened", payload: { via: "assistant" } });
   return {
@@ -287,11 +318,12 @@ export async function createAssistantTask(
     notes?: string | null;
     repeat?: "none" | "daily" | "weekly" | "monthly" | null;
     repeatWeekday?: number | null;
+    timeMinutes?: number | null;
   }
 ): Promise<TaskOp> {
   const title = input.title.trim();
   if (!title) return { ok: false, status: 400, error: "A task needs a title" };
-  const { todayISO, windows } = await clock(userId);
+  const { todayISO, tz, windows } = await clock(userId);
   const home = await ensureDefaultBucket(userId);
   const buckets = await prisma.bucket.findMany({ where: { userId, archivedAt: null } });
   const lessons = await listBucketLessons(userId);
@@ -305,7 +337,7 @@ export async function createAssistantTask(
     const match = buckets.find((b) => b.name.toLowerCase() === learned.toLowerCase());
     if (match) bucketId = match.id;
   }
-  const horizon = input.horizon ?? "later";
+  const horizon = input.horizon ?? "today";
   const dated = horizon !== "later";
   const task = await prisma.task.create({
     data: {
@@ -317,7 +349,7 @@ export async function createAssistantTask(
       bucketId,
       importance: input.importance ?? undefined,
       estimateMinutes: input.estimateMinutes ?? undefined,
-      attentionDate: dated ? attentionInstant(horizon, windows) : undefined,
+      attentionDate: horizon === "later" ? undefined : attentionOn(horizon, windows, tz, input.timeMinutes),
     },
   });
   if (input.repeat && input.repeat !== "none") {
@@ -380,7 +412,7 @@ export async function listTasksForAssistant(
 
 export async function searchTasksForAssistant(userId: string, query: string) {
   const tasks = await prisma.task.findMany({
-    where: { userId, status: { in: ["captured", "active", "completed"] }, droppedAt: null },
+    where: { userId, status: { in: ["captured", "active", "completed"] }, droppedAt: null, archivedAt: null },
     orderBy: { updatedAt: "desc" },
     take: 80,
   });
@@ -412,7 +444,7 @@ export async function easyWinsForAssistant(userId: string, minutes: number, buck
     bucketId = bucket.id;
   }
   const open = await prisma.task.findMany({
-    where: { userId, status: { in: ["captured", "active"] }, ...(bucketId ? { bucketId } : {}) },
+    where: { userId, status: { in: ["captured", "active"] }, archivedAt: null, ...(bucketId ? { bucketId } : {}) },
     orderBy: { updatedAt: "desc" },
     take: 80,
   });

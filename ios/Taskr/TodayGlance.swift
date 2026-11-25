@@ -43,18 +43,17 @@ struct TodayGlance: Codable {
         WidgetCenter.shared.reloadAllTimelines()
     }
 
-    static func publish(tasks: [TaskItem], occurrences: [TaskOccurrence], wins: [EasyWin], accentHex: String) {
+    static func publish(tasks: [TaskItem], occurrences: [TaskOccurrence], accentHex: String) {
         let active = tasks.filter { $0.status == .active }
         let pending = occurrences.filter { $0.status == .pending }
-        let titles = (active.map(\.title) + pending.compactMap { $0.task?.title }).prefix(3)
-        let win = wins.first
+        let titles = Array((active.map(\.title) + pending.compactMap { $0.task?.title }).prefix(3))
         let glance = TodayGlance(
             day: dayString(),
             count: active.count + pending.count,
-            easyTitle: win?.title ?? active.first?.title ?? pending.first?.task?.title,
-            easyMinutes: win?.estimateMinutes ?? win?.assumedMinutes ?? active.first?.estimateMinutes,
-            easyId: win?.id ?? active.first?.id ?? pending.first?.taskId,
-            titles: Array(titles),
+            easyTitle: titles.first,
+            easyMinutes: nil,
+            easyId: active.first?.id ?? pending.first?.taskId,
+            titles: titles,
             accentHex: accentHex
         )
         glance.save()
@@ -66,8 +65,7 @@ struct TodayGlance: Codable {
         SessionShare.persist()
         do {
             let today: TodayPayload = try await api.get("tasks?view=today")
-            let easy: EasyWinsPayload = try await api.get("assistant/easy-wins?minutes=25")
-            publish(tasks: today.tasks, occurrences: today.occurrences, wins: easy.wins, accentHex: accentHex)
+            publish(tasks: today.tasks, occurrences: today.occurrences, accentHex: accentHex)
         } catch {
             await MorningNudge.reschedule(read())
         }

@@ -1,22 +1,19 @@
-import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../auth/AuthContext";
 import { api } from "../api/client";
-import { branding } from "../config/branding";
 import type { Bucket, Task, TaskOccurrence, TaskStatus, TodayViewResponse } from "../api/types";
 import {
   applyBucketTint,
   isWorkBucket,
-  readBucketSpot,
   readHideWork,
   readHideFinished,
-  readWinMinutes,
   saveBucketSpot,
   saveHideWork,
   saveHideFinished,
-  saveWinMinutes,
 } from "../theme/bucketTheme";
-import { EasyWinsStrip } from "./EasyWinsStrip";
-import { FilterIcon, ProfileIcon } from "./icons";
+import { branding } from "../config/branding";
+import { FilterIcon, ProfileIcon, SearchIcon } from "./icons";
 import { TaskRow } from "./TaskRow";
 import { OccurrenceRow } from "./OccurrenceRow";
 import { QuickCapture } from "./QuickCapture";
@@ -33,39 +30,44 @@ interface Props {
   focusTaskId?: string | null;
 }
 
-const VIEW_OPTIONS: { id: BoardView; label: string }[] = [
+/** Last item in the bucket menu. Not a real bucket id. */
+const ARCHIVE_SPOT = "__archive";
+
+const VIEW_LABELS: { id: BoardView; label: string }[] = [
   { id: "today", label: "Today" },
   { id: "tomorrow", label: "Tomorrow" },
-  { id: "nextWeek", label: "Next week" },
+  { id: "nextWeek", label: "Upcoming" },
   { id: "later", label: "Later" },
-  { id: "all", label: "All" },
+  { id: "all", label: "Everything" },
 ];
 
-function attentionIsToday(value: string | null): boolean {
-  if (!value) return false;
-  const today = new Date();
-  const date = new Date(value);
-  return date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth() && date.getDate() === today.getDate();
-}
+const HORIZON_STACKS: { id: MoveHorizon; label: string }[] = [
+  { id: "today", label: "Today" },
+  { id: "tomorrow", label: "Tomorrow" },
+  { id: "nextWeek", label: "Upcoming" },
+  { id: "later", label: "Later" },
+];
 
 export function TaskBoard({ initialView = "all", focusTaskId }: Props) {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [view, setView] = useState<BoardView>(initialView);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [occurrences, setOccurrences] = useState<TaskOccurrence[]>([]);
+  const [tomorrowTasks, setTomorrowTasks] = useState<Task[]>([]);
+  const [tomorrowOccurrences, setTomorrowOccurrences] = useState<TaskOccurrence[]>([]);
   const [buckets, setBuckets] = useState<Bucket[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "">("");
-  const [spot, setSpot] = useState(readBucketSpot);
+  const [spot, setSpot] = useState("");
   const [hideWork, setHideWork] = useState(readHideWork);
   const [hideFinished, setHideFinished] = useState(readHideFinished);
-  const [winMinutes, setWinMinutes] = useState(readWinMinutes);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [winsToken, setWinsToken] = useState(0);
-  const [hiddenWinIds, setHiddenWinIds] = useState<string[]>([]);
+  const [archived, setArchived] = useState<Task[]>([]);
 
   useEffect(() => {
     setView(initialView);
@@ -86,22 +88,21 @@ export function TaskBoard({ initialView = "all", focusTaskId }: Props) {
   }
 
   const loadTicket = useRef(0);
-  const load = useCallback(() => {
+  const load = useCallback((_refresh?: boolean) => {
     const mine = ++loadTicket.current;
     setLoading(true);
-    setWinsToken((n) => n + 1);
     const params = new URLSearchParams({ view });
     if (search) params.set("search", search);
     if (view === "all" && statusFilter) params.set("status", statusFilter);
-    if (spot) params.set("bucketId", spot);
-    else if (hideWork) params.set("excludeBucketName", "Work");
 
     const tasksReq = DATED_VIEWS.has(view)
       ? api.get<TodayViewResponse>(`/tasks?${params.toString()}`)
       : api.get<Task[]>(`/tasks?${params.toString()}`);
+    const tomorrowReq =
+      view === "today" ? api.get<TodayViewResponse>("/tasks?view=tomorrow") : Promise.resolve(null);
 
-    tasksReq
-      .then((body) => {
+    Promise.all([tasksReq, tomorrowReq])
+      .then(([body, soon]) => {
         if (mine !== loadTicket.current) return;
         if (DATED_VIEWS.has(view)) {
           const tv = body as TodayViewResponse;
@@ -111,6 +112,8 @@ export function TaskBoard({ initialView = "all", focusTaskId }: Props) {
           setTasks(body as Task[]);
           setOccurrences([]);
         }
+        setTomorrowTasks(soon?.tasks ?? []);
+        setTomorrowOccurrences(soon?.occurrences ?? []);
         setError(null);
       })
       .catch((e) => {
@@ -119,11 +122,11 @@ export function TaskBoard({ initialView = "all", focusTaskId }: Props) {
       .finally(() => {
         if (mine === loadTicket.current) setLoading(false);
       });
-  }, [view, search, statusFilter, spot, hideWork]);
+  }, [view, search, statusFilter]);
 
   useEffect(load, [load]);
   useEffect(() => {
-    const onTasks = () => load();
+    const onTasks = () => load(true);
     window.addEventListener("taskr-tasks-changed", onTasks);
     return () => window.removeEventListener("taskr-tasks-changed", onTasks);
   }, [load]);
@@ -135,35 +138,17 @@ export function TaskBoard({ initialView = "all", focusTaskId }: Props) {
     .filter((b) => !b.archivedAt)
     .filter((b) => !(hideWork && isWorkBucket(b.name)))
     .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
-  const pages = [
-    { id: "", name: "All buckets", color: null as string | null },
-    ...openBuckets.map((b) => ({ id: b.id, name: b.name, color: b.color })),
-  ];
-  const pageIndex = Math.max(0, pages.findIndex((p) => p.id === spot));
-  const page = pages[pageIndex] ?? pages[0];
-
-  const pagesRef = useRef(pages);
-  const spotRef = useRef(spot);
-  pagesRef.current = pages;
-  spotRef.current = page.id;
-  const boardRef = useRef<HTMLDivElement>(null);
-  const dragStart = useRef<{ x: number; y: number; id: number } | null>(null);
+  const showingArchive = spot === ARCHIVE_SPOT;
+  const selectedBucket = openBuckets.find((b) => b.id === spot);
+  const bucketLabel = showingArchive ? "Archive" : selectedBucket?.name ?? "All buckets";
 
   function chooseSpot(id: string) {
     setSpot(id);
-    saveBucketSpot(id);
-  }
-
-  function shiftSpot(dir: number) {
-    const list = pagesRef.current;
-    if (list.length < 2) return;
-    const i = Math.max(0, list.findIndex((p) => p.id === spotRef.current));
-    const next = Math.min(list.length - 1, Math.max(0, i + dir));
-    if (next !== i) chooseSpot(list[next].id);
+    saveBucketSpot("");
   }
 
   useEffect(() => {
-    if (spot && buckets.length > 0 && !pages.some((p) => p.id === spot)) chooseSpot("");
+    if (spot && spot !== ARCHIVE_SPOT && buckets.length > 0 && !openBuckets.some((b) => b.id === spot)) chooseSpot("");
   }, [buckets, spot, hideWork]);
 
   function toggleHideWork() {
@@ -180,240 +165,229 @@ export function TaskBoard({ initialView = "all", focusTaskId }: Props) {
     saveHideFinished(next);
   }
 
-  function chooseMinutes(minutes: number) {
-    setWinMinutes(minutes);
-    saveWinMinutes(minutes);
-  }
-
   useEffect(() => {
-    applyBucketTint(page.color);
+    applyBucketTint(showingArchive ? null : selectedBucket?.color);
     return () => applyBucketTint(null);
-  }, [page.color]);
-
-  useEffect(() => {
-    const el = boardRef.current;
-    if (!el) return;
-    let acc = 0;
-    let lockUntil = 0;
-    function onWheel(e: WheelEvent) {
-      if (Math.abs(e.deltaX) < Math.abs(e.deltaY) * 1.4) {
-        acc = 0;
-        return;
-      }
-      const target = e.target as HTMLElement | null;
-      if (target?.closest(".swipe-content, input, textarea, select")) return;
-      if (Math.abs(e.deltaX) < 6) return;
-      e.preventDefault();
-      const now = Date.now();
-      if (now < lockUntil) return;
-      acc += e.deltaX;
-      if (Math.abs(acc) < 80) return;
-      const dir = acc > 0 ? 1 : -1;
-      acc = 0;
-      lockUntil = now + 420;
-      const list = pagesRef.current;
-      if (list.length < 2) return;
-      const i = Math.max(0, list.findIndex((p) => p.id === spotRef.current));
-      const next = Math.min(list.length - 1, Math.max(0, i + dir));
-      if (next === i) return;
-      const id = list[next].id;
-      setSpot(id);
-      saveBucketSpot(id);
-    }
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
-  }, []);
-
-  function onBoardPointerDown(e: ReactPointerEvent) {
-    const target = e.target as HTMLElement;
-    if (target.closest(".swipe-content, input, textarea, select, a, button")) return;
-    dragStart.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
-  }
-
-  function onBoardPointerUp(e: ReactPointerEvent) {
-    const start = dragStart.current;
-    dragStart.current = null;
-    if (!start || start.id !== e.pointerId) return;
-    const dx = e.clientX - start.x;
-    const dy = e.clientY - start.y;
-    if (Math.abs(dx) < 64 || Math.abs(dx) < Math.abs(dy) * 1.4) return;
-    shiftSpot(dx < 0 ? 1 : -1);
-  }
-
-  function hideWin(id: string) {
-    setHiddenWinIds((ids) => (ids.includes(id) ? ids : [...ids, id]));
-  }
-  function showWin(id: string) {
-    setHiddenWinIds((ids) => ids.filter((x) => x !== id));
-  }
+  }, [selectedBucket?.color, showingArchive]);
 
   async function completeTask(t: Task) {
     await completeId(t.id);
   }
   async function completeId(id: string) {
-    hideWin(id);
     await api.post(`/tasks/${id}/complete`);
-    load();
+    load(true);
   }
   async function undoTask(t: Task) {
-    showWin(t.id);
     await api.post(`/tasks/${t.id}/undo`);
-    load();
+    load(true);
   }
   async function moveHorizon(t: Task, horizon: MoveHorizon) {
     await api.post(`/tasks/${t.id}/horizon`, { horizon });
-    load();
+    load(true);
+  }
+  async function archiveTask(t: Task) {
+    await api.post(`/tasks/${t.id}/archive`);
+    load(true);
   }
   async function dropTask(t: Task) {
-    hideWin(t.id);
     await api.post(`/tasks/${t.id}/drop`);
-    load();
+    load(true);
   }
+  async function restoreTask(id: string) {
+    await api.post(`/tasks/${id}/reopen`);
+    setArchived((rows) => rows.filter((row) => row.id !== id));
+    load(true);
+  }
+  useEffect(() => {
+    if (spot !== ARCHIVE_SPOT) return;
+    api.get<Task[]>("/tasks?view=archived").then(setArchived).catch(() => setArchived([]));
+  }, [spot]);
   async function addToToday(t: Task) {
     await moveHorizon(t, "today");
   }
 
-  const visible = hideFinished ? tasks.filter((t) => t.status !== "completed") : tasks;
-  const pending = view === "today" ? visible.filter((t) => t.status === "active") : visible;
-  const completed = view === "today" && !hideFinished ? tasks.filter((t) => t.status === "completed") : [];
+  const scoped = tasks.filter((task) => inSpot(task.bucketId));
+  const hideDone = statusFilter !== "completed" && (hideFinished || view === "all");
+  const visible = hideDone ? scoped.filter((t) => t.status !== "completed") : scoped;
+  const listed = view === "today" ? visible.filter((t) => t.status === "active") : visible;
+  const pending = listed;
+  const zone = user?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const horizonGroups = HORIZON_STACKS.map((group) => ({
+    ...group,
+    tasks: pending.filter((task) => taskPlace(task, zone) === group.id),
+  })).filter((group) => group.tasks.length > 0);
+  const tomorrowPending = tomorrowTasks.filter((task) => task.status === "active" && inSpot(task.bucketId));
+  const tomorrowPendingOccurrences = tomorrowOccurrences.filter(
+    (item) => item.status === "pending" && inSpot(item.task?.bucketId),
+  );
+  const completed = view === "today" && !hideFinished ? scoped.filter((t) => t.status === "completed") : [];
   const pendingOccurrences = occurrences.filter((o) => {
+    if (!inSpot(o.task?.bucketId)) return false;
     if (hideFinished && o.status === "completed") return false;
     return o.status === "pending" || view !== "today";
   });
-  const completedOccurrences = view === "today" && !hideFinished ? occurrences.filter((o) => o.status === "completed") : [];
+  const completedOccurrences =
+    view === "today" && !hideFinished ? occurrences.filter((o) => o.status === "completed" && inSpot(o.task?.bucketId)) : [];
+
+  function inSpot(bucketId: string | null | undefined) {
+    if (hideWork && buckets.some((bucket) => bucket.id === bucketId && isWorkBucket(bucket.name))) return false;
+    if (!spot) return true;
+    return bucketId === spot;
+  }
 
   return (
-    <div
-      className="page task-board"
-      ref={boardRef}
-      onPointerDown={onBoardPointerDown}
-      onPointerUp={onBoardPointerUp}
-      onPointerCancel={() => {
-        dragStart.current = null;
-      }}
-    >
+    <div className="page task-board">
       <div className="board-title-row">
-        <h1>{branding.appName}</h1>
-        <div className="board-title-actions">
+        <div className="board-title-top">
+          <p className="brand-mark">{branding.appName}</p>
+          <div className="board-title-actions">
           <button
             type="button"
-            className={`icon-button filter-toggle${filtersOpen || search || spot || statusFilter ? " active" : ""}`}
+            className={`header-profile${searchOpen || search ? " active" : ""}`}
+            onClick={() => setSearchOpen((o) => !o)}
+            aria-expanded={searchOpen}
+            aria-label="Search"
+            title="Search"
+          >
+            <SearchIcon />
+          </button>
+          <button
+            type="button"
+            className={`header-profile${filtersOpen || statusFilter || hideWork || hideFinished ? " active" : ""}`}
             onClick={() => setFiltersOpen((o) => !o)}
             aria-expanded={filtersOpen}
-            aria-label="Search and filter"
-            title="Search and filter"
+            aria-label="Filters"
+            title="Filters"
           >
             <FilterIcon />
           </button>
           <NavLink to="/account" className="header-profile" aria-label="Account" title="Account">
             <ProfileIcon />
           </NavLink>
-        </div>
-      </div>
-      <div className="view-filters" role="tablist" aria-label="Task view">
-        {VIEW_OPTIONS.map((opt) => (
-          <button
-            key={opt.id}
-            type="button"
-            role="tab"
-            aria-selected={view === opt.id}
-            className={`view-chip${view === opt.id ? " active" : ""}`}
-            onClick={() => chooseView(opt.id)}
-          >
-            {opt.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="bucket-block">
-        <div
-          className="bucket-pager"
-          aria-label="Buckets"
-        >
-          <button type="button" className="bucket-pager-arrow" onClick={() => shiftSpot(-1)} disabled={pageIndex <= 0} aria-label="Previous bucket">
-            ‹
-          </button>
-          <div className="bucket-pager-main">
-            <div className="bucket-pager-name">{page.name}</div>
-            {pages.length > 1 && (
-              <div className="bucket-dots">
-                {pages.map((p, i) => (
-                  <button
-                    key={p.id || "all"}
-                    type="button"
-                    className={`bucket-dot${i === pageIndex ? " on" : ""}`}
-                    aria-label={p.name}
-                    aria-current={i === pageIndex ? "true" : undefined}
-                    onClick={() => chooseSpot(p.id)}
-                  />
-                ))}
+          {filtersOpen && (
+            <>
+              <button type="button" className="filters-backdrop" aria-label="Close filters" onClick={() => setFiltersOpen(false)} />
+              <div className="filters-popover">
+                <div className="filters">
+                  {view === "all" && (
+                    <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as TaskStatus | "")}>
+                      <option value="">Open</option>
+                      <option value="captured">Captured</option>
+                      <option value="active">Active</option>
+                      <option value="completed">Completed</option>
+                      <option value="dropped">Dropped</option>
+                    </select>
+                  )}
+                  <div className="list-switches">
+                    <button
+                      type="button"
+                      className={`view-chip hide-work${hideWork ? " active" : ""}`}
+                      aria-pressed={hideWork}
+                      onClick={toggleHideWork}
+                    >
+                      {hideWork ? "Work hidden" : "Hide work"}
+                    </button>
+                    <button
+                      type="button"
+                      className={`view-chip hide-work${hideFinished ? " active" : ""}`}
+                      aria-pressed={hideFinished}
+                      onClick={toggleHideFinished}
+                    >
+                      {hideFinished ? "Finished hidden" : "Hide finished"}
+                    </button>
+                  </div>
+                </div>
               </div>
-            )}
+            </>
+          )}
           </div>
-          <button
-            type="button"
-            className="bucket-pager-arrow"
-            onClick={() => shiftSpot(1)}
-            disabled={pageIndex >= pages.length - 1}
-            aria-label="Next bucket"
-          >
-            ›
-          </button>
+        </div>
+        <div className="board-pickers">
+          <label className="view-picker">
+            <span>{VIEW_LABELS.find((item) => item.id === view)?.label ?? "Today"}</span>
+            <span className="view-picker-chevron" aria-hidden="true">⌄</span>
+            <select value={view} aria-label="Timeframe" onChange={(e) => chooseView(e.target.value as BoardView)}>
+              {VIEW_LABELS.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="bucket-picker">
+            <span>{bucketLabel}</span>
+            <span className="view-picker-chevron" aria-hidden="true">⌄</span>
+            <select value={spot} aria-label="Bucket" onChange={(e) => chooseSpot(e.target.value)}>
+              <option value="">All buckets</option>
+              {openBuckets.map((bucket) => (
+                <option key={bucket.id} value={bucket.id}>
+                  {bucket.name}
+                </option>
+              ))}
+              <option value={ARCHIVE_SPOT}>Archive</option>
+            </select>
+          </label>
         </div>
       </div>
-
-      {view === "today" && (
-        <EasyWinsStrip
-          minutes={winMinutes}
-          onMinutes={chooseMinutes}
-          bucketId={spot}
-          hideWork={hideWork}
-          refreshToken={winsToken}
-          hiddenIds={hiddenWinIds}
-          renderTask={(task) => (
-            <TaskRow
-              key={task.id}
-              task={task}
-              onComplete={() => completeTask(task)}
-              onUndo={() => undoTask(task)}
-              onMove={(horizon) => moveHorizon(task, horizon)}
-              onDrop={() => dropTask(task)}
-              onAddToToday={attentionIsToday(task.attentionDate) ? undefined : () => addToToday(task)}
-              buckets={buckets}
-              onDetailsSaved={load}
-            />
-          )}
+      {(searchOpen || search) && (
+        <input
+          className="header-search"
+          placeholder="Search..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          aria-label="Search"
+          autoFocus
         />
       )}
-
-      <QuickCapture onCaptured={load} />
-
-      {filtersOpen && (
-      <div className="filters">
-        <input placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} />
-        {view === "all" && (
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as TaskStatus | "")}>
-            <option value="">Open</option>
-            <option value="captured">Captured</option>
-            <option value="active">Active</option>
-            <option value="completed">Completed</option>
-            <option value="dropped">Dropped</option>
-          </select>
-        )}
-        <select value={spot} onChange={(e) => chooseSpot(e.target.value)}>
-          <option value="">All buckets</option>
-          {buckets.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
-          ))}
-        </select>
-      </div>
-      )}
-
+      {showingArchive ? (
+        <section className="archive-screen">
+          {archived.length === 0 ? (
+            <p className="muted">Nothing archived.</p>
+          ) : (
+            <ul className="task-list">
+              {archived.map((task) => (
+                <li key={task.id} className="task-row">
+                  <div className="task-row-top">
+                    <span className="task-title">{task.title}</span>
+                    <button type="button" className="view-chip" onClick={() => restoreTask(task.id)}>
+                      Put back
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ) : (
+      <>
       {error && <p className="error">{error}</p>}
       {loading && tasks.length === 0 && <p className="muted">Loading…</p>}
 
+      {view === "all" ? (
+        horizonGroups.map((group) => (
+          <section key={group.id} className="horizon-stack">
+            <h2>{group.label}</h2>
+            <ul className="task-list">
+              {group.tasks.map((t) => (
+                <TaskRow
+                  key={t.id}
+                  task={t}
+                  onComplete={() => completeTask(t)}
+                  onUndo={() => undoTask(t)}
+                  onMove={(horizon) => moveHorizon(t, horizon)}
+                  onDrop={() => dropTask(t)}
+                  onArchive={() => archiveTask(t)}
+                  onAddToToday={() => addToToday(t)}
+                  buckets={buckets}
+                  showBucket={spot !== ""}
+                  onDetailsSaved={() => load(true)}
+                  startDetailsOpen={focusTaskId === t.id}
+                />
+              ))}
+            </ul>
+          </section>
+        ))
+      ) : (
       <ul className="task-list">
         {pending.map((t) => (
           <TaskRow
@@ -423,9 +397,11 @@ export function TaskBoard({ initialView = "all", focusTaskId }: Props) {
             onUndo={() => undoTask(t)}
             onMove={(horizon) => moveHorizon(t, horizon)}
             onDrop={() => dropTask(t)}
+            onArchive={() => archiveTask(t)}
             onAddToToday={view === "today" ? undefined : () => addToToday(t)}
             buckets={buckets}
-            onDetailsSaved={load}
+            showBucket={spot !== ""}
+            onDetailsSaved={() => load(true)}
             startDetailsOpen={focusTaskId === t.id}
           />
         ))}
@@ -434,23 +410,24 @@ export function TaskBoard({ initialView = "all", focusTaskId }: Props) {
             key={o.id}
             occurrence={o}
             onComplete={async () => {
-              hideWin(o.taskId);
               await api.post(`/tasks/${o.taskId}/occurrences/${o.id}/complete`);
-              load();
+              load(true);
             }}
             onUndo={async () => {
-              showWin(o.taskId);
               await api.post(`/tasks/${o.taskId}/occurrences/${o.id}/undo`);
-              load();
+              load(true);
             }}
           />
         ))}
       </ul>
+      )}
       {!loading &&
         pending.length === 0 &&
         pendingOccurrences.length === 0 &&
         completed.length === 0 &&
-        completedOccurrences.length === 0 && <p className="muted">Nothing here.</p>}
+        completedOccurrences.length === 0 && (
+          <p className="muted">{view === "today" ? "Nothing for today." : "Nothing here."}</p>
+        )}
 
       {view === "today" && (completed.length > 0 || completedOccurrences.length > 0) && (
         <details className="completed-section">
@@ -464,8 +441,10 @@ export function TaskBoard({ initialView = "all", focusTaskId }: Props) {
                 onUndo={() => undoTask(t)}
                 onMove={(horizon) => moveHorizon(t, horizon)}
                 onDrop={() => dropTask(t)}
+                onArchive={() => archiveTask(t)}
                 buckets={buckets}
-                onDetailsSaved={load}
+                showBucket={spot !== ""}
+                onDetailsSaved={() => load(true)}
               />
             ))}
             {completedOccurrences.map((o) => (
@@ -473,40 +452,84 @@ export function TaskBoard({ initialView = "all", focusTaskId }: Props) {
                 key={o.id}
                 occurrence={o}
                 onComplete={async () => {
-                  hideWin(o.taskId);
                   await api.post(`/tasks/${o.taskId}/occurrences/${o.id}/complete`);
-                  load();
+                  load(true);
                 }}
                 onUndo={async () => {
-                  showWin(o.taskId);
                   await api.post(`/tasks/${o.taskId}/occurrences/${o.id}/undo`);
-                  load();
+                  load(true);
                 }}
               />
             ))}
           </ul>
         </details>
       )}
-      <div className="list-switches">
-        <button
-          type="button"
-          className={`view-chip hide-work${hideWork ? " active" : ""}`}
-          aria-pressed={hideWork}
-          title="Leaves the Work bucket out of this switcher"
-          onClick={toggleHideWork}
-        >
-          {hideWork ? "Work hidden" : "Hide work"}
-        </button>
-        <button
-          type="button"
-          className={`view-chip hide-work${hideFinished ? " active" : ""}`}
-          aria-pressed={hideFinished}
-          title="Leaves completed tasks out of this list"
-          onClick={toggleHideFinished}
-        >
-          {hideFinished ? "Finished hidden" : "Hide finished"}
-        </button>
-      </div>
+      {view === "today" && (tomorrowPending.length > 0 || tomorrowPendingOccurrences.length > 0) && (
+        <section className="tomorrow-peek">
+          <h2>Tomorrow</h2>
+          <ul className="task-list">
+            {tomorrowPending.map((t) => (
+              <TaskRow
+                key={t.id}
+                task={t}
+                onComplete={() => completeTask(t)}
+                onUndo={() => undoTask(t)}
+                onMove={(horizon) => moveHorizon(t, horizon)}
+                onDrop={() => dropTask(t)}
+                onArchive={() => archiveTask(t)}
+                onAddToToday={() => addToToday(t)}
+                buckets={buckets}
+                showBucket={spot !== ""}
+                onDetailsSaved={() => load(true)}
+              />
+            ))}
+            {tomorrowPendingOccurrences.map((o) => (
+              <OccurrenceRow
+                key={o.id}
+                occurrence={o}
+                onComplete={async () => {
+                  await api.post(`/tasks/${o.taskId}/occurrences/${o.id}/complete`);
+                  load(true);
+                }}
+                onUndo={async () => {
+                  await api.post(`/tasks/${o.taskId}/occurrences/${o.id}/undo`);
+                  load(true);
+                }}
+              />
+            ))}
+          </ul>
+        </section>
+      )}
+      <QuickCapture onCaptured={() => load(true)} />
+      </>
+      )}
     </div>
   );
+}
+
+function calendarDay(instant: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone }).format(instant);
+}
+
+function shiftDay(iso: string, days: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
+/** Attention date, else deadline. No date, a past date, or a date after Upcoming is Later. */
+function taskPlace(task: Task, timeZone: string): MoveHorizon {
+  const raw = task.attentionDate ?? task.hardDeadline;
+  if (!raw) return "later";
+  const instant = new Date(raw);
+  if (Number.isNaN(instant.getTime())) return "later";
+  const day = calendarDay(instant, timeZone);
+  const today = calendarDay(new Date(), timeZone);
+  if (day === today) return "today";
+  if (day === shiftDay(today, 1)) return "tomorrow";
+  const start = shiftDay(today, 2);
+  const [y, m, d] = today.split("-").map(Number);
+  const weekday = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  const end = shiftDay(shiftDay(today, -weekday), 13);
+  if (day >= start && day <= (end < start ? start : end)) return "nextWeek";
+  return "later";
 }

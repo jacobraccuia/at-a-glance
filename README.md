@@ -6,22 +6,19 @@ and `docs/` for architecture, data model, implementation plan, integrations,
 and privacy documentation.
 
 **Status:** Phase 1 complete. Phase 2: open on **Today**. Bottom bar is
-Today, a center **Talk** mic, and All. Account is the profile icon.
-Talk opens a glowing face (pause ends the turn, words appear as it
-speaks, then the conversation stays up). Easy Wins sit on Today.
-A capture with no date goes to **Later**. The time chips are Today,
-Tomorrow, Next week, and Later. Easy Wins can be 15, 30, or 45 minutes.
-**Hide work** drops the Work bucket until you turn it back on.
-**Hide finished** drops completed tasks until you turn it back on.
+Today, a center **Talk** mic, and Everything. Account is the profile icon.
+Talk opens Puck. The mic starts immediately. A quiet call hangs up after
+20 seconds. A named clock time stays on that day. Midnight means the day
+only. A capture with no date goes to **Today**. Saying later stays Later.
+The groups are Today, Tomorrow, Upcoming, and Later. Everything hides
+completed tasks unless the filter is Completed. **Hide work** drops the
+Work bucket until you turn it back on.
 Every account starts with **Main**. It can be renamed and it cannot be archived.
 Moving a task into a bucket teaches the next similar capture.
 Guest login for phone testing.
-Swipe the task list sideways to move through buckets. All is the start.
-Each bucket colors the screen. The last bucket is remembered.
-A sideways twitch no longer cancels vertical scrolling.
 The same screens are a native iPhone app in `ios/` (SwiftUI). It talks
-to the live API. Safari can still drop the mic in the background; the
-iPhone app uses Apple speech instead.
+to the live API. Siri: Ask Puck, Talk to Puck, and Tell Puck start the call.
+Add to Tasker adds a task. Account can bias Puck toward tasks, both, or chat.
 See `docs/implementation-plan.md`.
 
 **Live:** https://server-production-1374.up.railway.app
@@ -127,9 +124,9 @@ docker-compose.yml         Local Postgres for development
   written to the database, and AI-set dates are never marked as explicit
   deadlines.
 - Conversational Talk uses GPT-Live (`gpt-live-1.1`) when the key is set.
-  Audio goes to OpenAI. The key stays on the server. Quick talk and typed
-  quick capture still work without a live session. Closing the sheet ends
-  the call.
+  Audio goes to OpenAI. The key stays on the server. Typed quick capture
+  still works without a live session. Closing the sheet, or 20 seconds of
+  silence, ends the call. A named clock time is stored on that day.
 - iOS links WebRTC 158.0.0 from `ios/Vendor/WebRTC` (checksum
   `dd26ba28fb9c8dbc82f4be3085e8d112a4e2a4e654e1786a9977a748c24c4912`).
   The xcframework stays local. Fetch the release zip from

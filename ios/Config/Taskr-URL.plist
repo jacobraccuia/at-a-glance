@@ -2,6 +2,29 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleSpokenName</key>
+	<string>Puck</string>
+	<key>INAlternativeAppNames</key>
+	<array>
+		<dict>
+			<key>INAlternativeAppName</key>
+			<string>Tasker</string>
+			<key>INAlternativeAppNamePronunciationHint</key>
+			<string>tasker</string>
+		</dict>
+		<dict>
+			<key>INAlternativeAppName</key>
+			<string>Puck</string>
+			<key>INAlternativeAppNamePronunciationHint</key>
+			<string>puhk</string>
+		</dict>
+	</array>
+	<key>NSSiriUsageDescription</key>
+	<string>Talk to Puck, or add a task to Tasker.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

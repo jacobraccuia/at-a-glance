@@ -13,6 +13,9 @@ struct AccountView: View {
     @State private var nudgeTime = MorningNudge.timeDate
     @State private var assistantChoices = AssistantChoice.builtin
     @State private var personalityId = "puck"
+    @State private var focus = "task"
+    @State private var savedFocus = "task"
+    @State private var focusReady = false
     @State private var memories: [MemoryRow] = []
     @State private var voiceUsage: UsageRow?
     @State private var personalityError: String?
@@ -62,6 +65,10 @@ struct AccountView: View {
                         Task { await choosePersonality(choice.id) }
                     } label: {
                         HStack(alignment: .center, spacing: 12) {
+                            Image(systemName: PersonalityMark.symbol(for: choice.name))
+                                .font(.body)
+                                .frame(width: 24, height: 24)
+                                .foregroundStyle(palette.accent)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(choice.name).foregroundStyle(palette.ink)
                                 Text(choice.description)
@@ -77,7 +84,13 @@ struct AccountView: View {
                     }
                     .buttonStyle(.plain)
                 }
-                Text("\(assistantChoices.first { $0.id == personalityId }?.name ?? "Puck") on the next call. Voice changes when Talk reconnects.")
+                Picker("Focus", selection: $focus) {
+                    Text("Tasks").tag("task")
+                    Text("Both").tag("both")
+                    Text("Chat").tag("chat")
+                }
+                .pickerStyle(.segmented)
+                Text("Tasks keeps her on the list. Chat lets her talk more. She stays an assistant, not a therapist.")
                     .font(.footnote)
                     .foregroundStyle(palette.muted)
                 if let personalityError {
@@ -138,6 +151,10 @@ struct AccountView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
         .task { await load() }
+        .onChange(of: focus) { _, value in
+            guard focusReady, value != savedFocus else { return }
+            Task { await saveFocus(value) }
+        }
         .onChange(of: nudgeTime) { _, date in
             MorningNudge.minutesFromMidnight = MorningNudge.minutes(from: date)
             Task { await TodayGlance.refresh(api: model.api, accentHex: model.accentHex) }
@@ -153,8 +170,23 @@ struct AccountView: View {
         voiceUsage = try? await model.api.get("assistant/live/usage")
         let me: MePersonality? = try? await model.api.get("auth/me")
         if let id = me?.personalityId { personalityId = id }
+        if let saved = me?.assistantFocus, saved == "chat" || saved == "both" || saved == "task" {
+            savedFocus = saved
+            focus = saved
+        }
+        focusReady = true
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         nudgeDenied = settings.authorizationStatus == .denied
+    }
+
+    private func saveFocus(_ value: String) async {
+        personalityError = nil
+        do {
+            let _: FocusBody = try await model.api.patch("assistant/focus", body: FocusBody(focus: value))
+            savedFocus = value
+        } catch {
+            personalityError = "That focus needs a server update before Puck uses it."
+        }
     }
 
     private func choosePersonality(_ id: String) async {
@@ -296,6 +328,11 @@ private struct PersonalityBody: Encodable {
     let id: String
 }
 
+private struct FocusBody: Codable {
+    let focus: String
+}
+
 private struct MePersonality: Decodable {
     let personalityId: String?
+    let assistantFocus: String?
 }

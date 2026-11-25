@@ -5,7 +5,7 @@
 import type { PrismaClient, Task } from "@prisma/client";
 import { logTaskEvent } from "../taskEvents.js";
 import { generateOccurrenceDates } from "../recurrence.js";
-import { addDaysToDateString, startOfDayInTimeZone } from "../timezone.js";
+import { addDaysToDateString, dateAtMinutes, startOfDayInTimeZone } from "../timezone.js";
 import type { AssistantAction, AssistantPlan, CaptureItem } from "./conversationParser.js";
 import { DEFAULT_EASY_WIN_MINUTES, formatEasyWinsSummary, rankEasyWins, type EasyWin } from "./easyWins.js";
 import { classifyTask, horizonLabel, horizonWindows, type HorizonName } from "../horizons.js";
@@ -53,7 +53,7 @@ function spokenForCapture(title: string, item: CaptureItem): string {
   if (item.dateDaysFromNow === 0 && item.dateKind !== "none") return `Added ${title}. It's on today.`;
   if (item.dateDaysFromNow === 1) return `Added ${title}. It's on tomorrow.`;
   if (item.dateDaysFromNow != null && item.dateKind !== "none") {
-    return item.dateDaysFromNow > 14 ? `Added ${title}. It's in Later.` : `Added ${title}. It's in Next week.`;
+    return item.dateDaysFromNow > 14 ? `Added ${title}. It's in Later.` : `Added ${title}. It's in Upcoming.`;
   }
   return `Added ${title}. It's in Later.`;
 }
@@ -169,7 +169,10 @@ function buildCreateData(ctx: ExecContext, item: CaptureItem): Record<string, un
   if (!data.bucketId && ctx.defaultBucketId) data.bucketId = ctx.defaultBucketId;
   if (!forceToday && !parkInbox && item.dateKind !== "none" && item.dateDaysFromNow != null) {
     const resolvedDateStr = addDaysToDateString(ctx.todayISO, item.dateDaysFromNow);
-    const resolvedDate = startOfDayInTimeZone(resolvedDateStr, ctx.tz);
+    const resolvedDate =
+      item.timeMinutes == null
+        ? startOfDayInTimeZone(resolvedDateStr, ctx.tz)
+        : dateAtMinutes(resolvedDateStr, ctx.tz, item.timeMinutes);
     data.status = "active";
     if (item.dateKind === "hard") {
       data.hardDeadline = resolvedDate;
@@ -201,7 +204,7 @@ export function sanitizeAssistantPlan(plan: AssistantPlan): AssistantPlan {
 
   if (hasClarify && hasMutation) {
     // Prefer the question — don't mutate until they answer.
-    const question = plan.actions.find((a) => a.type === "clarify")!.question;
+    const question = plan.actions.find((a): a is Extract<AssistantAction, { type: "clarify" }> => a.type === "clarify")?.question ?? plan.reply;
     return {
       reply: question,
       spoken: question,
@@ -569,6 +572,7 @@ export function fallbackPlanFromText(text: string): AssistantPlan {
               waitingOn: null,
               dateKind: "none",
               dateDaysFromNow: null,
+              timeMinutes: null,
               repeat,
               repeatWeekday,
             },
@@ -595,6 +599,9 @@ export function fallbackPlanFromText(text: string): AssistantPlan {
     waitingOn: null,
     dateKind: "none" as const,
     dateDaysFromNow: null,
+    timeMinutes: null,
+    repeat: "none" as const,
+    repeatWeekday: null,
   }));
   const reply =
     items.length === 1 ? `Got it — added "${items[0].cleanTitle}".` : `Got it — added ${items.length} things.`;

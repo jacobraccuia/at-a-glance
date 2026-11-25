@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  dateAtMinutes,
   endOfDayInTimeZone,
   getCurrentDateInTimeZone,
   startOfDayInTimeZone,
@@ -18,6 +19,11 @@ describe("startOfDayInTimeZone / endOfDayInTimeZone", () => {
     expect(start.toISOString()).toBe("2026-10-13T04:00:00.000Z");
     const end = endOfDayInTimeZone("2026-10-13", "America/New_York");
     expect(end.toISOString()).toBe("2026-10-14T03:59:59.999Z");
+  });
+
+  it("keeps a named clock time on that calendar day", () => {
+    const atThree = dateAtMinutes("2026-10-13", "America/New_York", 15 * 60);
+    expect(atThree.toISOString()).toBe("2026-10-13T19:00:00.000Z");
   });
 
   it("late-evening UTC now still falls inside UTC today", () => {

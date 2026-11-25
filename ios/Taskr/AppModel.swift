@@ -18,10 +18,8 @@ final class AppModel: ObservableObject {
     /// Bumps when Talk closes so Today/All reload what the assistant just did.
     @Published var boardRevision = 0
     @Published var talkKind: TalkKind = .live
-    /// "" is All. Shared by Today and All, kept across launches.
-    @Published var bucketSpot: String {
-        didSet { UserDefaults.standard.set(bucketSpot, forKey: "taskr.bucket") }
-    }
+    /// "" is All. A session filter, not remembered, so the board opens on All.
+    @Published var bucketSpot = ""
     /// Weekend switch. Hides the bucket named Work. Remembered.
     @Published var hideWork: Bool {
         didSet { UserDefaults.standard.set(hideWork, forKey: "taskr.hideWork") }
@@ -49,7 +47,6 @@ final class AppModel: ObservableObject {
     init() {
         let raw = UserDefaults.standard.string(forKey: "taskr.palette") ?? "auto"
         paletteChoice = PaletteChoice(rawValue: raw) ?? .auto
-        bucketSpot = UserDefaults.standard.string(forKey: "taskr.bucket") ?? ""
         hideWork = UserDefaults.standard.bool(forKey: "taskr.hideWork")
         hideFinished = UserDefaults.standard.bool(forKey: "taskr.hideFinished")
         let storedMinutes = UserDefaults.standard.object(forKey: "taskr.winMinutes") as? Int

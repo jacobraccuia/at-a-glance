@@ -87,6 +87,6 @@ export function classifyDateString(dateISO: string, windows: HorizonWindows): Ho
 export function horizonLabel(name: HorizonName): string {
   if (name === "today") return "Today";
   if (name === "tomorrow") return "Tomorrow";
-  if (name === "nextWeek") return "Next week";
+  if (name === "nextWeek") return "Upcoming";
   return "Later";
 }

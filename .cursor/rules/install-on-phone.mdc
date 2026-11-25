@@ -1,0 +1,15 @@
+---
+description: After app work, build Taskr and install it on the connected iPhone.
+alwaysApply: true
+---
+
+# Install on the phone when work is done
+
+When a turn changes the Taskr app, finish by building and installing on the connected iPhone. Do this before the reply. Do not stop at a simulator compile.
+
+- Device: Jacob’s iPhone, id `00008160-00112DA82680000A`. If that phone is missing, list devices and use the connected physical iPhone.
+- Project: `ios/Taskr.xcodeproj`, scheme `Taskr`. Sign with the project’s automatic team. Do not pass `CODE_SIGNING_ALLOWED=NO`.
+- Build for `platform=iOS` with that device id and `-allowProvisioningUpdates`.
+- Install the built `.app` with `xcrun devicectl device install app`, then launch `app.taskr.ios`.
+- If the phone is locked, unplugged, or signing fails, say so. Do not claim it is on the phone.
+- Do not push to GitHub unless asked.

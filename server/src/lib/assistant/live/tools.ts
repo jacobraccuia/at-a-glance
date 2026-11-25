@@ -130,6 +130,7 @@ export async function executeTool(userId: string, name: string, argsJson: string
           notes: str(args.notes) ?? null,
           repeat: repeat === "daily" || repeat === "weekly" || repeat === "monthly" ? repeat : "none",
           repeatWeekday: typeof args.repeatWeekday === "number" ? args.repeatWeekday : null,
+          timeMinutes: typeof args.timeMinutes === "number" ? args.timeMinutes : null,
         });
         if (!result.ok) return { ok: false, summary: result.error, changed: false };
         return { ok: true, summary: result.summary, changed: true };
@@ -247,11 +248,11 @@ export const LIVE_TOOLS = [
     taskId: { type: "string" },
     query: { type: "string" },
   }),
-  fn("list_easy_wins", "Tasks that fit a time budget, using the same ranking as the Easy Wins list.", {
+  fn("list_easy_wins", "Only when asked for a short window. Tasks with a fitting estimate or effort. A blank estimate is not short.", {
     minutes: { type: "integer" },
     bucketName: { type: "string" },
   }),
-  fn("create_task", "Create a task only for an explicit request. Never for a hypothetical or a someday idea.", {
+  fn("create_task", "Create a task only for an explicit request. Never for a hypothetical or a someday idea. Omit horizon to put it on today.", {
     title: { type: "string" },
     horizon: { type: "string", enum: ["today", "tomorrow", "nextWeek", "later"] },
     bucketName: { type: "string" },
@@ -260,6 +261,7 @@ export const LIVE_TOOLS = [
     notes: { type: "string" },
     repeat: { type: "string", enum: ["none", "daily", "weekly", "monthly"] },
     repeatWeekday: { type: "integer" },
+    timeMinutes: { type: "integer", description: "Minutes after local midnight. 3pm is 900. Omit when no clock time was named." },
   }, ["title"]),
   fn("update_task", "Change title, notes, bucket, estimate, importance, or waitingOn.", {
     taskId: { type: "string" },

@@ -50,6 +50,13 @@ const CaptureIntentSchema = z.object({
     .max(365)
     .nullable()
     .describe("Integer days from the provided reference date this task refers to. Null if dateKind is 'none'."),
+  timeMinutes: z
+    .number()
+    .int()
+    .min(0)
+    .max(1439)
+    .nullable()
+    .describe("Minutes after local midnight when the text names a clock time. 3pm is 900, noon is 720. Null when no clock time is named."),
 });
 
 export type CaptureIntent = z.infer<typeof CaptureIntentSchema>;
@@ -117,6 +124,8 @@ function buildSystemPrompt(context: ParseCaptureContext): string {
     `${offsetTable}. ` +
     "(\"this Friday\" and \"next Friday\" both use the same soonest-upcoming Friday from the table; " +
     "the linguistic distinction is too ambiguous to resolve otherwise.) " +
+    "If the text names a clock time, set timeMinutes to minutes after local midnight (3pm = 900, noon = 720). " +
+    "Otherwise timeMinutes is null. Morning, afternoon, or evening without a clock is null. " +
     `Existing buckets the user can be matched to (choose exactly one of these or null, never invent a new one): ${
       context.bucketNames.length > 0 ? context.bucketNames.join(", ") : "(none yet)"
     }. ` +

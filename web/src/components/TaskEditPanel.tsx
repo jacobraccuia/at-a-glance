@@ -28,9 +28,10 @@ interface Props {
   buckets: Bucket[];
   onSaved: () => void;
   onClose: () => void;
+  onDelete: () => void;
 }
 
-export function TaskEditPanel({ task, buckets, onSaved, onClose }: Props) {
+export function TaskEditPanel({ task, buckets, onSaved, onClose, onDelete }: Props) {
   const [title, setTitle] = useState(task.title);
   const [values, setValues] = useState<TaskDetailsValue>(valuesFromTask(task));
   const [saving, setSaving] = useState(false);
@@ -62,24 +63,24 @@ export function TaskEditPanel({ task, buckets, onSaved, onClose }: Props) {
 
   return (
     <div className="task-edit-panel">
-      <label>
+      <label className="task-field-label">
         Title
-        <input value={title} onChange={(e) => setTitle(e.target.value)} />
+        <input className="task-title-edit" value={title} onChange={(e) => setTitle(e.target.value)} aria-label="Title" />
       </label>
       <TaskDetailsFields value={values} onChange={setValues} buckets={buckets} />
       {task.status === "completed" && doneIn(task.createdAt, task.completedAt) && (
         <p className="muted small">{doneIn(task.createdAt, task.completedAt)}</p>
       )}
-      {task.recurrenceRuleId && (
-        <p className="muted small">Recurrence can't be edited yet once a task is created.</p>
-      )}
       {error && <p className="error">{error}</p>}
       <div className="task-edit-actions">
         <button onClick={save} disabled={saving}>
-          Save
+          {saving ? "Saving" : "Done"}
         </button>
         <button onClick={onClose} disabled={saving}>
-          Cancel
+          Close
+        </button>
+        <button className="danger" onClick={onDelete} disabled={saving}>
+          Delete
         </button>
       </div>
     </div>

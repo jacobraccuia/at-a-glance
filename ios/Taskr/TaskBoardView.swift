@@ -6,96 +6,156 @@ struct TaskBoardView: View {
     @Binding var view: BoardView
     @State private var tasks: [TaskItem] = []
     @State private var occurrences: [TaskOccurrence] = []
+    @State private var tomorrowTasks: [TaskItem] = []
+    @State private var tomorrowOccurrences: [TaskOccurrence] = []
     @State private var buckets: [Bucket] = []
-    @State private var wins: [EasyWin] = []
-    @State private var winTasks: [TaskItem] = []
-    @State private var winsReady = false
-    @State private var winsTicket = 0
     @State private var search = ""
     @State private var statusFilter = ""
     @State private var filtersOpen = false
-    @State private var draft = ""
-    @State private var captureNote: String?
+    @State private var searchOpen = false
     @State private var error: String?
     @State private var loading = true
     @State private var detail: TaskItem?
 
+    /// Last item in the bucket menu. Not a real bucket id.
+    private static let archiveSpot = "__archive"
+    private var showingArchive: Bool { model.bucketSpot == Self.archiveSpot }
+
     private var pending: [TaskItem] {
-        let open = model.hideFinished ? tasks.filter { $0.status != .completed } : tasks
-        return view == .today ? open.filter { $0.status == .active } : open
+        let hideDone = statusFilter != "completed" && (model.hideFinished || view == .all)
+        let open = hideDone ? tasks.filter { $0.status != .completed } : tasks
+        let listed = view == .today ? open.filter { $0.status == .active } : open
+        return listed.filter { inSpot($0.bucketId) }
     }
     private var completed: [TaskItem] {
-        view == .today && !model.hideFinished ? tasks.filter { $0.status == .completed } : []
+        view == .today && !model.hideFinished ? tasks.filter { $0.status == .completed && inSpot($0.bucketId) } : []
     }
     private var pendingOccurrences: [TaskOccurrence] {
         occurrences.filter { item in
+            guard inSpot(item.task?.bucketId) else { return false }
             if model.hideFinished && item.status == .completed { return false }
             return item.status == .pending || view != .today
         }
     }
+    private var tomorrowPending: [TaskItem] {
+        tomorrowTasks.filter { $0.status == .active && inSpot($0.bucketId) }
+    }
+    private var tomorrowPendingOccurrences: [TaskOccurrence] {
+        tomorrowOccurrences.filter { $0.status == .pending && inSpot($0.task?.bucketId) }
+    }
+    /// Everything, stacked Today → Tomorrow → Upcoming → Later. Empty groups stay out.
+    private struct HorizonStack: Identifiable {
+        let horizon: BoardView
+        let tasks: [TaskItem]
+        var id: String { horizon.rawValue }
+    }
+
+    private var horizonStacks: [HorizonStack] {
+        let order: [BoardView] = [.today, .tomorrow, .nextWeek, .later]
+        return order.compactMap { horizon in
+            let rows = pending.filter { place(of: $0) == horizon }
+            return rows.isEmpty ? nil : HorizonStack(horizon: horizon, tasks: rows)
+        }
+    }
+
+    /// Same windows as the server: attention date, else deadline. No date, a past date, or past Upcoming is Later.
+    private func place(of task: TaskItem) -> BoardView {
+        let raw = task.attentionDate ?? task.hardDeadline
+        guard let raw, let instant = ISO8601.date(raw) else { return .later }
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: model.user?.timezone ?? "") ?? .current
+        let day = cal.startOfDay(for: instant)
+        let today = cal.startOfDay(for: Date())
+        if day == today { return .today }
+        if let tomorrow = cal.date(byAdding: .day, value: 1, to: today), day == tomorrow { return .tomorrow }
+        guard let upcomingStart = cal.date(byAdding: .day, value: 2, to: today) else { return .later }
+        let weekday = cal.component(.weekday, from: today)
+        let thisWeekStart = cal.date(byAdding: .day, value: -(weekday - 1), to: today) ?? today
+        let upcomingEnd = cal.date(byAdding: .day, value: 13, to: thisWeekStart) ?? upcomingStart
+        let start = cal.startOfDay(for: upcomingStart)
+        let end = cal.startOfDay(for: upcomingEnd)
+        if day >= start && day <= max(start, end) { return .nextWeek }
+        return .later
+    }
+
     private var completedOccurrences: [TaskOccurrence] {
-        view == .today && !model.hideFinished ? occurrences.filter { $0.status == .completed } : []
+        view == .today && !model.hideFinished ? occurrences.filter { $0.status == .completed && inSpot($0.task?.bucketId) } : []
+    }
+
+    /// Bucket pages are a local filter. The list was already loaded.
+    private func inSpot(_ bucketId: String?) -> Bool {
+        if model.hideWork, let bucketId, let bucket = buckets.first(where: { $0.id == bucketId }), isWorkName(bucket.name) {
+            return false
+        }
+        if model.bucketSpot.isEmpty { return true }
+        return bucketId == model.bucketSpot
     }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 titleRow
-                chipRow
-                bucketPager
-                if view == .today {
-                    easyWins
-                }
-                capture
-                if filtersOpen { filters }
-                if let error {
-                    Text(error).font(.footnote).foregroundStyle(palette.danger)
-                }
-                if loading && tasks.isEmpty {
-                    ProgressView()
-                }
-                ForEach(pending) { task in
-                    TaskRowView(task: task, showAdd: view != .today, onChange: { await reload() }, onClear: { clearWin(task.id) }, onOpen: { detail = task })
-                }
-                ForEach(pendingOccurrences) { item in
-                    OccurrenceRowView(occurrence: item, onChange: { await reload() }, onClear: { clearWin(item.taskId) })
-                }
-                if !loading && pending.isEmpty && pendingOccurrences.isEmpty && completed.isEmpty && completedOccurrences.isEmpty {
-                    Text("Nothing here.").foregroundStyle(palette.muted)
-                }
-                if view == .today && (!completed.isEmpty || !completedOccurrences.isEmpty) {
-                    DisclosureGroup("\(completed.count + completedOccurrences.count) done") {
-                        ForEach(completed) { task in
-                            TaskRowView(task: task, showAdd: false, onChange: { await reload() }, onOpen: { detail = task })
+                if showingArchive {
+                    ArchiveList()
+                } else {
+                    if let error {
+                        Text(error).font(.footnote).foregroundStyle(palette.danger)
+                    }
+                    if loading && tasks.isEmpty {
+                        ProgressView()
+                    }
+                    if view == .all {
+                        if !loading && horizonStacks.isEmpty {
+                            Text("Nothing here.").foregroundStyle(palette.muted)
                         }
-                        ForEach(completedOccurrences) { item in
+                        ForEach(Array(horizonStacks.enumerated()), id: \.element.id) { index, stack in
+                            Text(stack.horizon.label)
+                                .font(.headline)
+                                .padding(.top, index == 0 ? 4 : 16)
+                            ForEach(stack.tasks) { task in
+                                TaskRowView(task: task, onChange: { await reload() }, onOpen: { detail = task })
+                            }
+                        }
+                    } else {
+                    ForEach(pending) { task in
+                        TaskRowView(task: task, onChange: { await reload() }, onOpen: { detail = task })
+                    }
+                    ForEach(pendingOccurrences) { item in
+                        OccurrenceRowView(occurrence: item, onChange: { await reload() })
+                    }
+                    if !loading && pending.isEmpty && pendingOccurrences.isEmpty && completed.isEmpty && completedOccurrences.isEmpty {
+                        Text(view == .today ? "Nothing for today." : "Nothing here.").foregroundStyle(palette.muted)
+                    }
+                    if view == .today && (!tomorrowPending.isEmpty || !tomorrowPendingOccurrences.isEmpty) {
+                        Text("Tomorrow")
+                            .font(.headline)
+                            .padding(.top, 16)
+                        ForEach(tomorrowPending) { task in
+                            TaskRowView(task: task, onChange: { await reload() }, onOpen: { detail = task })
+                        }
+                        ForEach(tomorrowPendingOccurrences) { item in
                             OccurrenceRowView(occurrence: item, onChange: { await reload() })
                         }
                     }
-                    .tint(palette.muted)
-                    .padding(.top, 8)
+                    if view == .today && (!completed.isEmpty || !completedOccurrences.isEmpty) {
+                        DisclosureGroup("\(completed.count + completedOccurrences.count) done") {
+                            ForEach(completed) { task in
+                                TaskRowView(task: task, onChange: { await reload() }, onOpen: { detail = task })
+                            }
+                            ForEach(completedOccurrences) { item in
+                                OccurrenceRowView(occurrence: item, onChange: { await reload() })
+                            }
+                        }
+                        .tint(palette.muted)
+                        .padding(.top, 8)
+                    }
+                    }
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.bottom, 8)
-        }
-        .gesture(bucketDrag)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            HStack(spacing: 8) {
-                switchChip(model.hideWork ? "Work hidden" : "Hide work", on: model.hideWork) {
-                    model.hideWork.toggle()
-                    syncTint()
-                }
-                switchChip(model.hideFinished ? "Finished hidden" : "Hide finished", on: model.hideFinished) {
-                    model.hideFinished.toggle()
-                }
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
-            .background(palette.bg.opacity(0.94))
+            .padding(.bottom, 200)
         }
         .task(id: loadKey) { await reload() }
-        .task(id: winsKey) { await reloadWins() }
         .toolbar(.hidden, for: .navigationBar)
         .task(id: model.pendingTaskId) { await openPending() }
         .onChange(of: model.bucketSpot) { _, _ in syncTint() }
@@ -117,41 +177,25 @@ struct TaskBoardView: View {
         name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "work"
     }
 
-    private var pages: [(id: String, name: String, color: String?)] {
-        [("", "All buckets", nil)] + openBuckets.map { ($0.id, $0.name, $0.color) }
-    }
-
-    private var pageIndex: Int {
-        max(0, pages.firstIndex { $0.id == model.bucketSpot } ?? 0)
-    }
-
     private var loadKey: String {
-        "\(view.rawValue)|\(search)|\(statusFilter)|\(model.bucketSpot)|\(model.boardRevision)|\(model.hideWork)"
+        "\(view.rawValue)|\(search)|\(statusFilter)|\(model.boardRevision)"
     }
 
-    private var winsKey: String {
-        "\(view.rawValue)|\(model.winMinutes)|\(model.bucketSpot)|\(model.hideWork)"
+    private var filtersOn: Bool {
+        model.hideWork || model.hideFinished || !statusFilter.isEmpty
     }
 
-    private var bucketDrag: some Gesture {
-        DragGesture(minimumDistance: 28)
-            .onEnded { value in
-                let dx = value.translation.width
-                let dy = value.translation.height
-                guard abs(dx) > 64, abs(dx) > abs(dy) * 1.4 else { return }
-                shiftSpot(dx < 0 ? 1 : -1)
-            }
-    }
-
-    private func shiftSpot(_ dir: Int) {
-        guard pages.count > 1 else { return }
-        let next = min(pages.count - 1, max(0, pageIndex + dir))
-        guard next != pageIndex else { return }
-        model.bucketSpot = pages[next].id
-        syncTint()
+    private var bucketLabel: String {
+        if showingArchive { return "Archive" }
+        if model.bucketSpot.isEmpty { return "All buckets" }
+        return openBuckets.first { $0.id == model.bucketSpot }?.name ?? "All buckets"
     }
 
     private func syncTint() {
+        if showingArchive {
+            model.bucketTintHex = nil
+            return
+        }
         let open = openBuckets
         if !model.bucketSpot.isEmpty && !open.contains(where: { $0.id == model.bucketSpot }) {
             model.bucketSpot = ""
@@ -159,68 +203,89 @@ struct TaskBoardView: View {
         model.bucketTintHex = open.first { $0.id == model.bucketSpot }?.color
     }
 
-    private var bucketPager: some View {
-        VStack(spacing: 6) {
-            HStack {
-                Button { shiftSpot(-1) } label: {
-                    Image(systemName: "chevron.left")
-                        .frame(width: 36, height: 36)
+    private var titleRow: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            HStack(spacing: 10) {
+                Text(Branding.appName)
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(palette.ink)
+                Spacer(minLength: 8)
+                headerCircle("magnifyingglass", "Search", on: searchOpen || !search.isEmpty) {
+                    searchOpen.toggle()
                 }
-                .disabled(pageIndex <= 0)
-                .accessibilityLabel("Previous bucket")
-                Spacer()
-                Text(pages[pageIndex].name).font(.headline)
-                Spacer()
-                Button { shiftSpot(1) } label: {
-                    Image(systemName: "chevron.right")
-                        .frame(width: 36, height: 36)
+                headerCircle("slider.horizontal.3", "Filters", on: filtersOpen || filtersOn) {
+                    filtersOpen.toggle()
                 }
-                .disabled(pageIndex >= pages.count - 1)
-                .accessibilityLabel("Next bucket")
+                .popover(isPresented: $filtersOpen, attachmentAnchor: .rect(.bounds), arrowEdge: .top) {
+                    filters
+                        .padding(12)
+                        .frame(minWidth: 260)
+                        .presentationCompactAdaptation(.popover)
+                }
+                NavigationLink {
+                    AccountView()
+                } label: {
+                    Image(systemName: "person.circle")
+                        .font(.title3)
+                        .frame(width: 48, height: 48)
+                        .foregroundStyle(palette.ink)
+                        .background(palette.surface)
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(palette.border))
+                }
+                .accessibilityLabel("Account")
             }
-            if pages.count > 1 {
-                HStack(spacing: 6) {
-                    ForEach(Array(pages.enumerated()), id: \.offset) { index, page in
-                        Button {
-                            model.bucketSpot = page.id
-                            syncTint()
-                        } label: {
-                            Capsule()
-                                .fill(index == pageIndex ? palette.accent : palette.border)
-                                .frame(width: index == pageIndex ? 16 : 7, height: 7)
-                        }
-                        .accessibilityLabel(page.name)
+            HStack {
+                Menu {
+                    ForEach(BoardView.allCases) { option in
+                        Button(option.label) { view = option }
                     }
+                } label: {
+                    pickerLabel(view.label)
                 }
+                .accessibilityLabel("Timeframe, \(view.label)")
+                Spacer(minLength: 12)
+                Menu {
+                    Button("All buckets") { model.bucketSpot = "" }
+                    ForEach(openBuckets) { bucket in
+                        Button(bucket.name) { model.bucketSpot = bucket.id }
+                    }
+                    Button("Archive") { model.bucketSpot = Self.archiveSpot }
+                } label: {
+                    pickerLabel(bucketLabel)
+                }
+                .accessibilityLabel("Bucket, \(bucketLabel)")
+            }
+            if searchOpen || !search.isEmpty {
+                TextField("Search...", text: $search)
+                    .textFieldStyle(.roundedBorder)
             }
         }
     }
 
-    private var titleRow: some View {
-        HStack(spacing: 8) {
-            Text(Branding.appName)
-                .font(.title3.weight(.bold))
+    private func pickerLabel(_ title: String) -> some View {
+        HStack(spacing: 4) {
+            Text(title)
+                .font(.title3.weight(.semibold))
                 .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
-                .layoutPriority(1)
-            Spacer(minLength: 12)
-            Button {
-                filtersOpen.toggle()
-            } label: {
-                Image(systemName: "magnifyingglass")
-                    .font(.title2)
-                    .frame(width: 44, height: 44)
-            }
-            .accessibilityLabel("Search and filter")
-            NavigationLink {
-                AccountView()
-            } label: {
-                Image(systemName: "person.circle")
-                    .font(.title2)
-                    .frame(width: 44, height: 44)
-            }
-            .accessibilityLabel("Account")
+            Image(systemName: "chevron.down")
+                .font(.caption.weight(.semibold))
         }
+        .foregroundStyle(palette.ink)
+        .padding(.vertical, 10)
+    }
+
+    private func headerCircle(_ symbol: String, _ label: String, on: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.body.weight(.semibold))
+                .frame(width: 48, height: 48)
+                .foregroundStyle(on ? palette.accent : palette.ink)
+                .background(palette.surface)
+                .clipShape(Circle())
+                .overlay(Circle().stroke(on ? palette.accent : palette.border))
+        }
+        .accessibilityLabel(label)
     }
 
     private func switchChip(_ title: String, on: Bool, action: @escaping () -> Void) -> some View {
@@ -236,85 +301,8 @@ struct TaskBoardView: View {
         }
     }
 
-    private var chipRow: some View {
-        HStack(spacing: 6) {
-            ForEach(BoardView.allCases) { option in
-                Button(option.label) { view = option }
-                    .font(.caption.weight(view == option ? .semibold : .regular))
-                    .lineLimit(1)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .frame(maxWidth: .infinity)
-                    .background(view == option ? palette.accent : palette.surface)
-                    .foregroundStyle(view == option ? Color.white : palette.ink)
-                    .clipShape(Capsule())
-                    .overlay(Capsule().stroke(palette.border))
-            }
-        }
-    }
-
-    private var easyWins: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Easy wins").font(.headline)
-                Spacer()
-                ForEach([15, 30, 45], id: \.self) { minutes in
-                    Button("\(minutes)m") { model.winMinutes = minutes }
-                        .font(.caption.weight(model.winMinutes == minutes ? .semibold : .regular))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(model.winMinutes == minutes ? palette.accent : palette.surface)
-                        .foregroundStyle(model.winMinutes == minutes ? Color.white : palette.ink)
-                        .clipShape(Capsule())
-                }
-            }
-            if winsReady && wins.isEmpty {
-                Text("Nothing that fits \(model.winMinutes) minutes.").font(.caption).foregroundStyle(palette.muted)
-            }
-            ForEach(winTasks) { task in
-                TaskRowView(
-                    task: task,
-                    showAdd: true,
-                    onChange: { await reload() },
-                    onClear: { clearWin(task.id) },
-                    onOpen: { detail = task }
-                )
-            }
-        }
-    }
-
-    private var capture: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                TextField("Add a task...", text: $draft)
-                    .submitLabel(.done)
-                    .onSubmit { Task { await captureNow() } }
-                Button {
-                    Task { await captureNow() }
-                } label: {
-                    Image(systemName: "arrow.right")
-                        .frame(width: 36, height: 36)
-                        .background(palette.accent)
-                        .foregroundStyle(.white)
-                        .clipShape(Circle())
-                }
-                .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .accessibilityLabel("Add")
-            }
-            .padding(8)
-            .background(palette.surface)
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-            .overlay(RoundedRectangle(cornerRadius: 16).stroke(palette.border))
-            if let captureNote {
-                Text(captureNote).font(.caption).foregroundStyle(palette.muted)
-            }
-        }
-    }
-
     private var filters: some View {
         VStack(spacing: 8) {
-            TextField("Search...", text: $search)
-                .textFieldStyle(.roundedBorder)
             if view == .all {
                 Picker("Status", selection: $statusFilter) {
                     Text("Open").tag("")
@@ -324,47 +312,15 @@ struct TaskBoardView: View {
                     Text("Dropped").tag("dropped")
                 }
             }
-            Picker("Bucket", selection: $model.bucketSpot) {
-                Text("All buckets").tag("")
-                ForEach(buckets) { bucket in
-                    Text(bucket.name).tag(bucket.id)
+            HStack(spacing: 8) {
+                switchChip(model.hideWork ? "Work hidden" : "Hide work", on: model.hideWork) {
+                    model.hideWork.toggle()
+                    syncTint()
+                }
+                switchChip(model.hideFinished ? "Finished hidden" : "Hide finished", on: model.hideFinished) {
+                    model.hideFinished.toggle()
                 }
             }
-        }
-    }
-
-    private func clearWin(_ id: String) {
-        wins.removeAll { $0.id == id }
-        winTasks.removeAll { $0.id == id }
-    }
-
-    private func reloadWins() async -> [EasyWin] {
-        guard view == .today else { return wins }
-        winsTicket += 1
-        let ticket = winsTicket
-        var easyQuery = ["minutes": "\(model.winMinutes)"]
-        if !model.bucketSpot.isEmpty { easyQuery["bucketId"] = model.bucketSpot }
-        else if model.hideWork { easyQuery["excludeBucketName"] = "Work" }
-        let easyQS = easyQuery.map { "\($0.key)=\($0.value.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? $0.value)" }.joined(separator: "&")
-        do {
-            let easy: EasyWinsPayload = try await model.api.get("assistant/easy-wins?\(easyQS)")
-            guard ticket == winsTicket else { return wins }
-            wins = easy.wins
-            var rows = easy.tasks ?? []
-            if rows.isEmpty {
-                for win in easy.wins {
-                    if let task: TaskItem = try? await model.api.get("tasks/\(win.id)") {
-                        rows.append(task)
-                    }
-                }
-            }
-            guard ticket == winsTicket else { return wins }
-            winTasks = rows
-            winsReady = true
-            return easy.wins
-        } catch {
-            if ticket == winsTicket { winsReady = true }
-            return wins
         }
     }
 
@@ -374,8 +330,6 @@ struct TaskBoardView: View {
         var query = ["view": view.rawValue]
         if !search.isEmpty { query["search"] = search }
         if view == .all && !statusFilter.isEmpty { query["status"] = statusFilter }
-        if !model.bucketSpot.isEmpty { query["bucketId"] = model.bucketSpot }
-        else if model.hideWork { query["excludeBucketName"] = "Work" }
         let qs = query.map { "\($0.key)=\($0.value.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? $0.value)" }.joined(separator: "&")
         do {
             if view.usesHorizonPayload {
@@ -389,8 +343,14 @@ struct TaskBoardView: View {
             buckets = try await model.api.get("buckets")
             syncTint()
             if view == .today {
-                let fresh = await reloadWins()
-                TodayGlance.publish(tasks: tasks, occurrences: occurrences, wins: fresh, accentHex: model.accentHex)
+                if let soon: TodayPayload = try? await model.api.get("tasks?view=tomorrow") {
+                    tomorrowTasks = soon.tasks
+                    tomorrowOccurrences = soon.occurrences
+                }
+                TodayGlance.publish(tasks: tasks, occurrences: occurrences, accentHex: model.accentHex)
+            } else {
+                tomorrowTasks = []
+                tomorrowOccurrences = []
             }
             error = nil
         } catch {
@@ -398,36 +358,10 @@ struct TaskBoardView: View {
         }
     }
 
-    private func captureNow() async {
-        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
-        draft = ""
-        struct Body: Encodable { let text: String }
-        struct Captured: Decodable { let horizon: String? }
-        do {
-            let created: [Captured] = try await model.api.post("tasks/quick-capture", body: Body(text: text))
-            captureNote = savedNote(created.map { $0.horizon ?? "later" })
-            await reload()
-        } catch {
-            self.error = error.localizedDescription
-            draft = text
-        }
-    }
-
     private func openPending() async {
         guard let id = model.pendingTaskId else { return }
         await open(id)
         if model.pendingTaskId == id { model.pendingTaskId = nil }
-    }
-
-    private func savedNote(_ horizons: [String]) -> String {
-        let labels = Dictionary(uniqueKeysWithValues: [
-            ("today", "Today"), ("tomorrow", "Tomorrow"), ("nextWeek", "Next week"), ("later", "Later"),
-        ])
-        let places = Array(Set(horizons.map { labels[$0] ?? "Later" }))
-        if horizons.count == 1 { return "Saved to \(places[0])." }
-        if places.count == 1 { return "Saved \(horizons.count) to \(places[0])." }
-        return "Saved \(horizons.count). Each one landed in its own time."
     }
 
     private func open(_ id: String) async {
@@ -457,74 +391,127 @@ struct TaskDetailSheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    Button(liveOn ? "Stop" : "Start") {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    labeled("Title") {
+                        TextField("Title", text: $title)
+                            .font(.title2.weight(.semibold))
+                    }
+                    labeled("Notes") {
+                        TextField("Notes", text: $notes, axis: .vertical)
+                            .lineLimit(2...6)
+                    }
+                    labeled("Bucket") {
+                        Menu(bucketName) {
+                            ForEach(buckets) { bucket in
+                                Button(bucket.name) { bucketId = bucket.id }
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    labeled("Importance") {
+                        Menu(importance.rawValue.capitalized) {
+                            ForEach(Importance.allCases, id: \.self) { level in
+                                Button(level.rawValue.capitalized) { importance = level }
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    labeled("Effort") {
+                        Menu(effort.isEmpty ? "Not set" : effort.capitalized) {
+                            Button("Not set") { effort = "" }
+                            Button("Low") { effort = "low" }
+                            Button("Medium") { effort = "medium" }
+                            Button("High") { effort = "high" }
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    labeled("Estimate") {
+                        TextField("Minutes", text: $estimate)
+                            .keyboardType(.numberPad)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(palette.surface)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                    labeled("Waiting on") {
+                        TextField("Who or what", text: $waiting)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(palette.surface)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                    labeled("Deadline") {
+                        Toggle(deadlineOn ? "On" : "None", isOn: $deadlineOn)
+                        if deadlineOn {
+                            DatePicker("Date", selection: $deadline, displayedComponents: [.date, .hourAndMinute])
+                        }
+                    }
+                    Button(liveOn ? "Stop live" : "Start live") {
                         Task { await toggleLive() }
                     }
-                    Text("Lock Screen while you do this one. It leaves when you finish or stop. It does not stay up all day.")
-                        .font(.footnote)
-                        .foregroundStyle(palette.muted)
+                    .font(.subheadline.weight(.semibold))
                     if let liveNote {
-                        Text(liveNote)
-                            .font(.footnote)
-                            .foregroundStyle(palette.danger)
+                        Text(liveNote).font(.footnote).foregroundStyle(palette.danger)
                     }
+                    if task.status == .completed, let span = ISO8601.doneIn(from: task.createdAt, to: task.completedAt) {
+                        Text(span).font(.footnote).foregroundStyle(palette.muted)
+                    }
+                    Button("Delete", role: .destructive) {
+                        Task { await remove() }
+                    }
+                    .padding(.top, 8)
                 }
-                if task.status == .completed, let span = ISO8601.doneIn(from: task.createdAt, to: task.completedAt) {
-                    Text(span)
-                        .font(.footnote)
-                        .foregroundStyle(palette.muted)
-                }
-                TextField("Title", text: $title)
-                TextField("Notes", text: $notes, axis: .vertical)
-                TextField("Minutes", text: $estimate)
-                    .keyboardType(.numberPad)
-                TextField("Waiting on", text: $waiting)
-                Toggle("Deadline", isOn: $deadlineOn)
-                if deadlineOn {
-                    DatePicker("Due", selection: $deadline)
-                }
-                Picker("Importance", selection: $importance) {
-                    ForEach(Importance.allCases, id: \.self) { Text($0.rawValue.capitalized).tag($0) }
-                }
-                Picker("Effort", selection: $effort) {
-                    Text("Not set").tag("")
-                    Text("Low").tag("low")
-                    Text("Medium").tag("medium")
-                    Text("High").tag("high")
-                }
-                Text("Low can be an easy win. Medium only at 45 minutes. High never is. Not set lets the time guess decide.")
-                    .font(.footnote)
-                    .foregroundStyle(palette.muted)
-                Picker("Bucket", selection: $bucketId) {
-                    ForEach(buckets) { Text($0.name).tag($0.id) }
-                }
+                .padding(20)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .navigationTitle("Details")
+            .background(palette.bg)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) { Button("Save") { Task { await save() } } }
+                ToolbarItem(placement: .cancellationAction) { Button("Close") { Task { await save() } } }
             }
-            .task {
-                title = task.title
-                notes = task.notes ?? ""
-                estimate = task.estimateMinutes.map(String.init) ?? ""
-                waiting = task.waitingOn ?? ""
-                if let raw = task.hardDeadline, let parsed = ISO8601.date(raw) {
-                    deadlineOn = true
-                    deadline = parsed
-                }
-                importance = task.importance
-                effort = task.effort?.rawValue ?? ""
-                bucketId = task.bucketId ?? ""
-                buckets = (try? await model.api.get("buckets")) ?? []
-                if bucketId.isEmpty, let home = buckets.first(where: { $0.isDefault }) ?? buckets.first {
-                    bucketId = home.id
-                }
-                liveOn = TaskActivity.isRunning(task.id)
-            }
+            .task { await load() }
         }
+    }
+
+    private func labeled<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(palette.muted)
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var bucketName: String {
+        buckets.first { $0.id == bucketId }?.name ?? "Bucket"
+    }
+
+    private func load() async {
+        title = task.title
+        notes = task.notes ?? ""
+        estimate = task.estimateMinutes.map(String.init) ?? ""
+        waiting = task.waitingOn ?? ""
+        if let raw = task.hardDeadline, let parsed = ISO8601.date(raw) {
+            deadlineOn = true
+            deadline = parsed
+        }
+        importance = task.importance
+        effort = task.effort?.rawValue ?? ""
+        bucketId = task.bucketId ?? ""
+        buckets = (try? await model.api.get("buckets")) ?? []
+        if bucketId.isEmpty, let home = buckets.first(where: { $0.isDefault }) ?? buckets.first {
+            bucketId = home.id
+        }
+        liveOn = TaskActivity.isRunning(task.id)
+    }
+
+    private func remove() async {
+        try? await model.api.postVoid("tasks/\(task.id)/drop")
+        await TaskActivity.stop(taskId: task.id)
+        await onChange()
+        dismiss()
     }
 
     private func save() async {
@@ -566,5 +553,52 @@ struct TaskDetailSheet: View {
         let ok = await TaskActivity.begin(id: task.id, title: title, minutes: minutes, accentHex: model.accentHex)
         liveOn = ok
         liveNote = ok ? nil : "Live Activities are off in Settings."
+    }
+}
+
+private struct ArchiveList: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.palette) private var palette
+    @State private var tasks: [TaskItem] = []
+    @State private var error: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if let error {
+                Text(error).font(.footnote).foregroundStyle(palette.danger)
+            }
+            if tasks.isEmpty && error == nil {
+                Text("Nothing archived.").foregroundStyle(palette.muted)
+            }
+            ForEach(tasks) { task in
+                HStack(alignment: .center, spacing: 10) {
+                    Text(task.title)
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Button("Put back") { Task { await restore(task.id) } }
+                        .font(.caption.weight(.semibold))
+                }
+                .padding(12)
+                .background(palette.surface)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .overlay(RoundedRectangle(cornerRadius: 14).stroke(palette.border))
+            }
+        }
+        .task { await load() }
+    }
+
+    private func load() async {
+        do {
+            tasks = try await model.api.get("tasks?view=archived")
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    private func restore(_ id: String) async {
+        try? await model.api.postVoid("tasks/\(id)/reopen")
+        NotificationCenter.default.post(name: .taskrTasksChanged, object: nil)
+        await load()
     }
 }

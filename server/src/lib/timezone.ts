@@ -73,12 +73,10 @@ function localPartsInTimeZone(date: Date, tz: string) {
   };
 }
 
-/** Start of the given local calendar date (YYYY-MM-DD) in tz, as a UTC Date instant. */
-export function startOfDayInTimeZone(dateStr: string, tz: string): Date {
+/** Wall-clock time on a local calendar date. Hour and minute default to midnight. */
+export function zonedWallTime(dateStr: string, tz: string, hour = 0, minute = 0): Date {
   const [y, m, d] = dateStr.split("-").map(Number);
-  // Desired wall-clock reading in the target zone.
-  const desiredAsUtcMs = Date.UTC(y, m - 1, d, 0, 0, 0, 0);
-  // First guess: that same Y-M-D as if it were UTC.
+  const desiredAsUtcMs = Date.UTC(y, m - 1, d, hour, minute, 0, 0);
   let guess = desiredAsUtcMs;
   for (let i = 0; i < 4; i++) {
     const local = localPartsInTimeZone(new Date(guess), tz);
@@ -88,6 +86,17 @@ export function startOfDayInTimeZone(dateStr: string, tz: string): Date {
     guess -= delta;
   }
   return new Date(guess);
+}
+
+/** Start of the given local calendar date (YYYY-MM-DD) in tz, as a UTC Date instant. */
+export function startOfDayInTimeZone(dateStr: string, tz: string): Date {
+  return zonedWallTime(dateStr, tz, 0, 0);
+}
+
+/** Local clock time on a calendar day. 900 is 3:00pm. Out of range clamps to the day. */
+export function dateAtMinutes(dateStr: string, tz: string, minutesFromMidnight: number): Date {
+  const clamped = Math.max(0, Math.min(1439, Math.trunc(minutesFromMidnight)));
+  return zonedWallTime(dateStr, tz, Math.floor(clamped / 60), clamped % 60);
 }
 
 /** End of the given local calendar date (inclusive, i.e. 23:59:59.999 local) in tz, as UTC Date. */

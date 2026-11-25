@@ -75,6 +75,18 @@ struct TodayPayload: Codable {
     let occurrences: [TaskOccurrence]
 }
 
+enum PersonalityMark {
+    static func symbol(for name: String) -> String {
+        switch name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "atlas": return "mountain.2"
+        case "sage": return "book.closed"
+        case "mercury": return "bolt"
+        case "logos": return "text.alignleft"
+        default: return "sparkles"
+        }
+    }
+}
+
 struct EasyWin: Codable, Identifiable {
     let id: String
     let title: String
@@ -179,9 +191,9 @@ enum BoardView: String, CaseIterable, Identifiable {
         switch self {
         case .today: return "Today"
         case .tomorrow: return "Tomorrow"
-        case .nextWeek: return "Next week"
+        case .nextWeek: return "Upcoming"
         case .later: return "Later"
-        case .all: return "All"
+        case .all: return "Everything"
         }
     }
     var usesHorizonPayload: Bool { self != .all }

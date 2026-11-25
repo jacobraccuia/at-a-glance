@@ -194,6 +194,7 @@ describe("Phase 1 core flows", () => {
         waitingOn: null,
         dateKind: "hard",
         dateDaysFromNow: 3,
+        timeMinutes: null,
       },
     ]);
 
@@ -226,6 +227,7 @@ describe("Phase 1 core flows", () => {
         waitingOn: null,
         dateKind: "soft",
         dateDaysFromNow: 10,
+        timeMinutes: null,
       },
     ]);
 
@@ -255,6 +257,7 @@ describe("Phase 1 core flows", () => {
         waitingOn: null,
         dateKind: "none",
         dateDaysFromNow: null,
+        timeMinutes: null,
       },
       {
         cleanTitle: "Pay rent",
@@ -264,6 +267,7 @@ describe("Phase 1 core flows", () => {
         waitingOn: null,
         dateKind: "hard",
         dateDaysFromNow: 2,
+        timeMinutes: null,
       },
       {
         cleanTitle: "Email John about the proposal",
@@ -273,6 +277,7 @@ describe("Phase 1 core flows", () => {
         waitingOn: null,
         dateKind: "none",
         dateDaysFromNow: null,
+        timeMinutes: null,
       },
     ]);
 
@@ -347,6 +352,7 @@ describe("Phase 1 core flows", () => {
               waitingOn: null,
               dateKind: "none",
               dateDaysFromNow: null,
+              timeMinutes: null,
             },
             {
               cleanTitle: "Email the promoter",
@@ -356,6 +362,7 @@ describe("Phase 1 core flows", () => {
               waitingOn: null,
               dateKind: "none",
               dateDaysFromNow: null,
+              timeMinutes: null,
             },
           ],
         },

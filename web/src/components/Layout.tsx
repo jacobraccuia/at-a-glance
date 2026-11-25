@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { primeTalkAudio } from "../hooks/useAssistantTts";
 import { useVoiceSession } from "../voice/VoiceSessionContext";
@@ -22,7 +22,7 @@ const NAV_ITEMS = [
   },
   {
     to: "/all",
-    label: "All",
+    label: "Everything",
     end: false,
     icon: (
       <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -35,7 +35,6 @@ const NAV_ITEMS = [
 export function Layout() {
   const { user } = useAuth();
   const { open, toggleSession } = useVoiceSession();
-  const navigate = useNavigate();
   const location = useLocation();
 
   return (
@@ -48,19 +47,9 @@ export function Layout() {
       <main>
         <Outlet />
       </main>
-      <nav className="bottom-nav">
-        <NavLink
-          to="/"
-          end
-          onClick={(event) => {
-            if (location.pathname === "/" && location.search) {
-              event.preventDefault();
-              navigate("/");
-            }
-          }}
-        >
+      <nav className="bottom-nav" aria-label="Task views">
+        <NavLink to="/" end className={() => (location.pathname === "/" && !location.search ? "active" : "")} aria-label="Today">
           {NAV_ITEMS[0].icon}
-          {NAV_ITEMS[0].label}
         </NavLink>
         <button
           type="button"
@@ -73,19 +62,9 @@ export function Layout() {
           aria-pressed={open}
         >
           <MicIcon />
-          <span>Talk</span>
         </button>
-        <NavLink
-          to="/all"
-          onClick={(event) => {
-            if (location.pathname === "/all") {
-              event.preventDefault();
-              navigate("/all", { replace: true });
-            }
-          }}
-        >
+        <NavLink to="/all" className={({ isActive }) => (isActive ? "active" : "")} aria-label="Everything">
           {NAV_ITEMS[1].icon}
-          {NAV_ITEMS[1].label}
         </NavLink>
       </nav>
       <VoiceSheet />

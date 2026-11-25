@@ -12,12 +12,12 @@ import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 
 export type SwipeStage = "none" | "left" | "right-near" | "right-mid" | "right-far";
 
-const LEFT_THRESHOLD = 76;
-const RIGHT_NEAR_THRESHOLD = 76;
-const RIGHT_FAR_THRESHOLD = 168;
+const LEFT_THRESHOLD = 140;
+const RIGHT_NEAR_THRESHOLD = 140;
+const RIGHT_FAR_THRESHOLD = 240;
 const RIGHT_MID_THRESHOLD = 150;
 const RIGHT_FAR_3_THRESHOLD = 230;
-const MAX_DRAG = 220;
+const MAX_DRAG = 280;
 const MAX_DRAG_3 = 300;
 // A touch/mouse move smaller than this (in either axis) doesn't yet commit
 // to being a horizontal swipe vs. a vertical page scroll.
@@ -44,6 +44,8 @@ interface Options {
   /** 3 zones when a short swipe can mean Today. */
   zones?: 2 | 3;
   disabled?: boolean;
+  /** True only after the drag is far enough to commit, so a short swipe can still change buckets. */
+  onCommitChange?: (committed: boolean) => void;
 }
 
 export function useSwipeRow({
@@ -53,6 +55,7 @@ export function useSwipeRow({
   onSwipeRightFar,
   zones = 2,
   disabled,
+  onCommitChange,
 }: Options) {
   const [dragX, setDragX] = useState(0);
   const [dragging, setDragging] = useState(false);
@@ -90,12 +93,15 @@ export function useSwipeRow({
     e.preventDefault();
     setDragging(true);
     const limit = zones === 3 ? MAX_DRAG_3 : MAX_DRAG;
-    setDragX(Math.max(-limit, Math.min(limit, dx)));
+    const next = Math.max(-limit, Math.min(limit, dx));
+    setDragX(next);
+    onCommitChange?.(Math.abs(next) >= (zones === 3 ? RIGHT_NEAR_THRESHOLD : LEFT_THRESHOLD));
   }
 
   function onPointerUp(e: ReactPointerEvent) {
     if (pointerId.current !== e.pointerId) return;
     const finalStage = stageFor(dragX, zones);
+    onCommitChange?.(finalStage !== "none");
     reset();
     if (finalStage === "left") onSwipeLeft?.();
     else if (finalStage === "right-far") onSwipeRightFar?.();
@@ -105,6 +111,7 @@ export function useSwipeRow({
 
   function onPointerCancel(e: ReactPointerEvent) {
     if (pointerId.current !== e.pointerId) return;
+    onCommitChange?.(false);
     reset();
   }
 

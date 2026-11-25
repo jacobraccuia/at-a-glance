@@ -18,10 +18,12 @@ const CaptureItemSchema = z.object({
   waitingOn: z.string().nullable(),
   dateKind: z.enum(["none", "soft", "hard"]),
   dateDaysFromNow: z.number().int().min(0).max(365).nullable(),
+  // Minutes after local midnight. Null when they did not name a clock time.
+  timeMinutes: z.number().int().min(0).max(1439).nullable(),
   // "every Monday" / "every day". "none" for a one-off.
-  repeat: z.enum(["none", "daily", "weekly", "monthly"]).optional(),
-  // 0=Sunday … 6=Saturday. Required when repeat is weekly and they named a day.
-  repeatWeekday: z.number().int().min(0).max(6).nullable().optional(),
+  repeat: z.enum(["none", "daily", "weekly", "monthly"]),
+  // 0=Sunday … 6=Saturday. Null unless repeat is weekly and they named a day.
+  repeatWeekday: z.number().int().min(0).max(6).nullable(),
 });
 
 const AssistantActionSchema = z.discriminatedUnion("type", [
@@ -186,6 +188,7 @@ export async function parseConversationMessage(
     "  \"tomorrow\" → dateKind 'soft' with dateDaysFromNow 1.",
     "  \"later\" / \"someday\" / \"not today\" / \"backlog\" → dateKind 'soft' with dateDaysFromNow null (Later).",
     "  Named days (Friday, next week) → soft/hard with the weekday offset table.",
+    "  A clock time (3pm, 15:00, noon) sets timeMinutes (3pm = 900, noon = 720). No clock → timeMinutes null.",
     "  Recurrence: \"every Monday\" / \"every day\" / \"every month\" sets repeat to weekly/daily/monthly.",
     "  repeatWeekday is 0=Sunday through 6=Saturday (Monday=1). Otherwise repeat is \"none\" and repeatWeekday is null.",
     "  Strip the schedule words out of cleanTitle (\"Call Mom\", not \"Every Monday call Mom\").",
@@ -196,9 +199,11 @@ export async function parseConversationMessage(
     "  words that identifies the task. Prefer clarify if more than one open task could match.",
     "- list: when they ask what's on today / tomorrow / next week / later / everything.",
     "  scope is today, tomorrow, nextWeek, later, or all.",
-    "- easy_wins: when they have a short window (\"I have 30 minutes\", \"what can I knock out quick\",",
+    "- easy_wins: only when they ask for a short window (\"I have 30 minutes\", \"what can I knock out quick\",",
     "  \"easy wins\"). Pass minutes if they named a budget, otherwise null (defaults to 30).",
-    "  Do NOT invent which tasks are easy -- the server ranks them with transparent rules.",
+    "  Do NOT invent which tasks are easy, and do not treat a missing estimate as short.",
+    "  The server ranks only tasks that already have a fitting estimate or effort.",
+    "  When you name the near-future horizon, say Upcoming. The scope value stays nextWeek.",
     "- clarify: ask ONE short question ONLY when something is odd/ambiguous (two possible tasks,",
     "  unclear if they mean complete vs create). NEVER combine clarify with create/complete/drop",
     "  in the same plan — either ask OR act, never both.",
@@ -210,7 +215,7 @@ export async function parseConversationMessage(
     "  no reading a list aloud. Example: \"Added Call Gastro — it's on today.\"",
     "- reply is the written record. It can add a short bullet of what changed.",
     "  spoken and reply must match: if you only ask a question, spoken is that question.",
-    "- New tasks with no date clues go to Later. Say that out loud. If they named today, tomorrow,",
+    "- New tasks with no date clues go to Today. Say that out loud. If they named today, tomorrow,",
     "  or a day, name that place instead.",
   ].join("\n");
 
@@ -257,7 +262,9 @@ export async function parseConversationMessage(
     });
 
     return { reply: result.data.reply, spoken: result.data.spoken, actions };
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "parse failed";
+    console.error("assistant parse failed", message.replace(/sk-[A-Za-z0-9_-]+/g, "sk-redacted").slice(0, 400));
     return null;
   } finally {
     clearTimeout(timeout);

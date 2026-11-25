@@ -86,13 +86,10 @@ enum MorningNudge {
     }
 
     private static func body(for glance: TodayGlance) -> String {
-        guard let easy = glance.easyTitle, !easy.isEmpty else {
+        guard let first = glance.titles.first, !first.isEmpty else {
             return "\(glance.count) on today."
         }
-        if let minutes = glance.easyMinutes {
-            return "\(glance.count) today. Easiest is \(easy), about \(minutes) minutes."
-        }
-        return "\(glance.count) today. Easiest is \(easy)."
+        return "\(glance.count) today. \(first)."
     }
 
     /// Today at the chosen time if it is still ahead and the app has not been opened.

@@ -44,6 +44,14 @@ export function ArrowRightIcon() {
   );
 }
 
+export function ArchiveIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 7h18v3H3zM5 10v9h14v-9" />
+      <path d="M10 14h4" />
+    </svg>
+  );
+}
 export function CheckIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -52,11 +60,19 @@ export function CheckIcon() {
   );
 }
 
-export function FilterIcon() {
+export function SearchIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="11" cy="11" r="7" />
       <path d="M20 20l-3.5-3.5" />
+    </svg>
+  );
+}
+
+export function FilterIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 6h16M7 12h10M10 18h4" />
     </svg>
   );
 }
@@ -75,6 +91,46 @@ export function ProfileIcon() {
       <circle cx="12" cy="8" r="3.2" />
       <path d="M5 19.2c1.4-2.6 3.8-4 7-4s5.6 1.4 7 4" />
     </svg>
+  );
+}
+
+const PERSONALITY_MARKS: Record<string, JSX.Element> = {
+  puck: (
+    <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3l1.6 5.2L19 10l-5.4 1.8L12 17l-1.6-5.2L5 10l5.4-1.8L12 3Z" />
+      <path d="M18 15l.6 1.8L20.5 17.5 18.6 18.1 18 20l-.6-1.9L15.5 17.5l1.9-.7L18 15Z" />
+    </svg>
+  ),
+  atlas: (
+    <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 18l5.5-8 3.5 5 2.5-3.5L21 18" />
+      <path d="M3 18h18" />
+    </svg>
+  ),
+  sage: (
+    <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 6c-2.2-1.6-5.2-2-8-1.4V18c2.8-.6 5.8-.2 8 1.4 2.2-1.6 5.2-2 8-1.4V4.6C17.2 4 14.2 4.4 12 6Z" />
+      <path d="M12 6v13.4" />
+    </svg>
+  ),
+  mercury: (
+    <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M13 3L6 13h6l-1 8 7-10h-6l1-8Z" />
+    </svg>
+  ),
+  logos: (
+    <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 7h14M5 12h10M5 17h14" />
+    </svg>
+  ),
+};
+
+export function PersonalityMark({ name }: { name: string }) {
+  const mark = PERSONALITY_MARKS[name.trim().toLowerCase()] ?? PERSONALITY_MARKS.puck;
+  return (
+    <span className="personality-mark" aria-hidden>
+      {mark}
+    </span>
   );
 }
 

@@ -130,6 +130,19 @@ liveRouter.get("/personalities", (_req, res) => {
 });
 
 const personalitySchema = z.object({ id: z.string().min(1) });
+const focusSchema = z.object({ focus: z.enum(["task", "both", "chat"]) });
+
+liveRouter.patch("/focus", async (req, res) => {
+  const parsed = focusSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const userId = req.session.userId!;
+  const prefs = await prisma.userPreferences.upsert({
+    where: { userId },
+    update: { assistantFocus: parsed.data.focus },
+    create: { userId, assistantFocus: parsed.data.focus },
+  });
+  res.json({ assistantFocus: prefs.assistantFocus });
+});
 
 liveRouter.patch("/personality", async (req, res) => {
   const parsed = personalitySchema.safeParse(req.body);

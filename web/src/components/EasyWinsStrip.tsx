@@ -19,6 +19,7 @@ interface Props {
   refreshToken?: number;
   hiddenIds?: string[];
   renderTask: (task: Task) => ReactNode;
+  onVisible?: (ids: string[]) => void;
 }
 
 /** Short tasks that fit the time you actually have. Checking one off clears it here. */
@@ -30,6 +31,7 @@ export function EasyWinsStrip({
   refreshToken = 0,
   hiddenIds = [],
   renderTask,
+  onVisible,
 }: Props) {
   const [easyWins, setEasyWins] = useState<Task[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -38,8 +40,7 @@ export function EasyWinsStrip({
   const loadEasyWins = useCallback(() => {
     const mine = ++ticket.current;
     const params = new URLSearchParams({ minutes: String(minutes) });
-    if (bucketId) params.set("bucketId", bucketId);
-    else if (hideWork) params.set("excludeBucketName", "Work");
+    if (hideWork) params.set("excludeBucketName", "Work");
     api
       .get<{ minutes: number; wins: EasyWin[]; tasks?: Task[] }>(`/assistant/easy-wins?${params.toString()}`)
       .then(async (r) => {
@@ -58,13 +59,22 @@ export function EasyWinsStrip({
       .finally(() => {
         if (mine === ticket.current) setLoaded(true);
       });
-  }, [minutes, bucketId, hideWork]);
+  }, [minutes, hideWork]);
 
   useEffect(() => {
     loadEasyWins();
   }, [loadEasyWins, refreshToken]);
 
-  const visible = easyWins.filter((w) => !hiddenIds.includes(w.id));
+  const visible = easyWins.filter((w) => {
+    if (hiddenIds.includes(w.id)) return false;
+    if (bucketId && w.bucketId !== bucketId) return false;
+    return true;
+  });
+  const visibleKey = visible.map((task) => task.id).join(",");
+  useEffect(() => {
+    onVisible?.(visibleKey ? visibleKey.split(",") : []);
+  }, [visibleKey, onVisible]);
+  useEffect(() => () => onVisible?.([]), [onVisible]);
   if (!loaded) return null;
   if (visible.length === 0) {
     return (
